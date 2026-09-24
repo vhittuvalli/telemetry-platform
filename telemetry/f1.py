@@ -39,12 +39,53 @@ def get_driver_telemetry(session, driver):
     return merged.reset_index(drop=True)
 
 def to_standard_format(tel, driver):
-    """Your conversion: seconds, meters, brake as 0/1, spec column names,
-    plus a 'vehicle_id' column with the driver code."""
+    """Convert one driver's merged telemetry to the platform's standard format."""
+    return pd.DataFrame({
+        "time":       tel["SessionTime"].dt.total_seconds(),
+        "vehicle_id": driver,
+        "x":          tel["X"] / 10,
+        "y":          tel["Y"] / 10,
+        "z":          tel["Z"] / 10,
+        "speed":      tel["Speed"],
+        "throttle":   tel["Throttle"],
+        "brake":      tel["Brake"].astype("boolean").astype("Int8"),
+        "gear":       tel["nGear"].astype("Int8"),
+        "rpm":        tel["RPM"],
+        "drs":        tel["DRS"].astype("Int8"),
+        "on_track":   tel["Status"] == "OnTrack",
+    })
 
-def build_race_replay(session):
-    """Run the two functions above for every driver and combine them
-    into one table."""
+def build_race_replay(session, padding_s=60):
+    """Build one table with every driver's telemetry on a shared clock,
+    where time 0 is the start of the session."""
+    frames = []
+    for driver in session.results["Abbreviation"]:
+        try:
+            tel = get_driver_telemetry(session, driver)
+        except (KeyError, ValueError) as err:
+            print(f"Skipping {driver}: {err}")
+            continue
+        frames.append(to_standard_format(tel, driver))
 
-def save_replay(df, path):
-    """Write to Parquet (much smaller than CSV for a full race)."""
+    replay = pd.concat(frames, ignore_index=True)
+
+    start = session.session_start_time.total_seconds()
+    end = session.laps["Time"].max().total_seconds()
+
+    replay["time"] = replay["time"] - start
+    replay = replay[
+        (replay["time"] >= -padding_s) & (replay["time"] <= end - start + padding_s)
+    ]
+
+    return replay.sort_values(["time", "vehicle_id"]).reset_index(drop=True)
+
+REPLAYS_DIR = DATA_DIR / "replays"
+
+def save_replay(replay, path):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    replay.to_parquet(path, index=False, compression="zstd")
+    return path
+
+def load_replay(path):
+    return pd.read_parquet(path)
