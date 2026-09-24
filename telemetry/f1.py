@@ -79,5 +79,13 @@ def build_race_replay(session, padding_s=60):
 
     return replay.sort_values(["time", "vehicle_id"]).reset_index(drop=True)
 
-def save_replay(df, path):
-    """Write to Parquet (much smaller than CSV for a full race)."""
+REPLAYS_DIR = DATA_DIR / "replays"
+
+def save_replay(replay, path):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    replay.to_parquet(path, index=False, compression="zstd")
+    return path
+
+def load_replay(path):
+    return pd.read_parquet(path)
