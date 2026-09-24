@@ -39,8 +39,21 @@ def get_driver_telemetry(session, driver):
     return merged.reset_index(drop=True)
 
 def to_standard_format(tel, driver):
-    """Your conversion: seconds, meters, brake as 0/1, spec column names,
-    plus a 'vehicle_id' column with the driver code."""
+    """Convert one driver's merged telemetry to the platform's standard format."""
+    return pd.DataFrame({
+        "time":       tel["SessionTime"].dt.total_seconds(),
+        "vehicle_id": driver,
+        "x":          tel["X"] / 10,
+        "y":          tel["Y"] / 10,
+        "z":          tel["Z"] / 10,
+        "speed":      tel["Speed"],
+        "throttle":   tel["Throttle"],
+        "brake":      tel["Brake"].astype("boolean").astype("Int8"),
+        "gear":       tel["nGear"].astype("Int8"),
+        "rpm":        tel["RPM"],
+        "drs":        tel["DRS"].astype("Int8"),
+        "on_track":   tel["Status"] == "OnTrack",
+    })
 
 def build_race_replay(session):
     """Run the two functions above for every driver and combine them
