@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telemetry"
+version = "0.1.0"
+description = "Telemetry analysis and 3D replay platform"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = ["telemetry"]
