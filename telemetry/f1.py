@@ -55,9 +55,29 @@ def to_standard_format(tel, driver):
         "on_track":   tel["Status"] == "OnTrack",
     })
 
-def build_race_replay(session):
-    """Run the two functions above for every driver and combine them
-    into one table."""
+def build_race_replay(session, padding_s=60):
+    """Build one table with every driver's telemetry on a shared clock,
+    where time 0 is the start of the session."""
+    frames = []
+    for driver in session.results["Abbreviation"]:
+        try:
+            tel = get_driver_telemetry(session, driver)
+        except (KeyError, ValueError) as err:
+            print(f"Skipping {driver}: {err}")
+            continue
+        frames.append(to_standard_format(tel, driver))
+
+    replay = pd.concat(frames, ignore_index=True)
+
+    start = session.session_start_time.total_seconds()
+    end = session.laps["Time"].max().total_seconds()
+
+    replay["time"] = replay["time"] - start
+    replay = replay[
+        (replay["time"] >= -padding_s) & (replay["time"] <= end - start + padding_s)
+    ]
+
+    return replay.sort_values(["time", "vehicle_id"]).reset_index(drop=True)
 
 def save_replay(df, path):
     """Write to Parquet (much smaller than CSV for a full race)."""
