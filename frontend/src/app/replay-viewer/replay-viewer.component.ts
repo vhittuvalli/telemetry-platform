@@ -3,6 +3,9 @@ import {
 } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { inject } from '@angular/core';
+import { ReplayApiService } from '../replay/replay-api.service';
+import { ReplayMeta } from '../replay/replay.models';
 
 @Component({
   selector: 'app-replay-viewer',
@@ -19,6 +22,8 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private controls!: OrbitControls;
   private frameId = 0;
   private resizeObserver?: ResizeObserver;
+  private api = inject(ReplayApiService);
+  private replayId = 'monza_2024_r';
 
   constructor(private zone: NgZone) {}
 
@@ -52,6 +57,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.resize();
 
     this.zone.runOutsideAngular(() => this.animate());
+    this.api.getMeta(this.replayId).subscribe({
+    next: (meta) => this.buildTrack(meta),
+    error: (err) => console.error('Failed to load replay metadata', err),
+});
   }
 
   private animate = (): void => {
@@ -69,6 +78,33 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
+  /** Convert data coordinates (Z-up) to three.js coordinates (Y-up). */
+private toScene([x, y, z]: [number, number, number]): THREE.Vector3 {
+  return new THREE.Vector3(x, z, -y);
+}
+
+private buildTrack(meta: ReplayMeta): void {
+  const points = meta.track_outline.map((p) => this.toScene(p));
+  points.push(points[0].clone()); // close the loop
+
+  //draw points and line thru points
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+  this.scene.add(new THREE.Line(geometry, material));
+
+  // Center the view on the track
+  const box = new THREE.Box3().setFromPoints(points);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+
+  this.controls.target.copy(center);
+  this.camera.position.set(center.x, center.y + size.x * 0.8, center.z + size.z * 0.8);
+  this.controls.update();
+
+  // Put the ground just below the lowest point of the track
+  const ground = this.scene.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh;
+  ground.position.set(center.x, box.min.y - 0.5, center.z);
+}
 
   ngOnDestroy(): void {
     cancelAnimationFrame(this.frameId);
