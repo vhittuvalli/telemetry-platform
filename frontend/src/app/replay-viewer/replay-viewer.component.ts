@@ -24,6 +24,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
   private api = inject(ReplayApiService);
   private replayId = 'monza_2024_r';
+  private ground!: THREE.Mesh;
 
   constructor(private zone: NgZone) {}
 
@@ -42,12 +43,12 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     sun.position.set(500, 1000, 300);
     this.scene.add(sun);
 
-    const ground = new THREE.Mesh(
+    this.ground = new THREE.Mesh(
       new THREE.PlaneGeometry(10000, 10000),
       new THREE.MeshStandardMaterial({ color: 0x3a7d44 }),
     );
-    ground.rotation.x = -Math.PI / 2;
-    this.scene.add(ground);
+    this.ground.rotation.x = -Math.PI / 2;
+    this.scene.add(this.ground);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
@@ -88,9 +89,11 @@ private buildTrack(meta: ReplayMeta): void {
   points.push(points[0].clone()); // close the loop
 
   //draw points and line thru points
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const linePoints = points.map((p) => p.clone().setY(p.y + 0.2));
+  const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
   const material = new THREE.LineBasicMaterial({ color: 0xffffff });
   this.scene.add(new THREE.Line(geometry, material));
+  this.scene.add(this.buildRoad(points.slice(0, -1)));
 
   // Center the view on the track
   const box = new THREE.Box3().setFromPoints(points);
@@ -102,8 +105,44 @@ private buildTrack(meta: ReplayMeta): void {
   this.controls.update();
 
   // Put the ground just below the lowest point of the track
-  const ground = this.scene.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh;
-  ground.position.set(center.x, box.min.y - 0.5, center.z);
+  this.ground.position.set(center.x, box.min.y - 0.5, center.z);
+}
+private buildRoad(points: THREE.Vector3[], width = 12): THREE.Mesh {
+  // Smooth the outline and resample it to evenly spaced points
+  const curve = new THREE.CatmullRomCurve3(points, true); // true = closed loop
+  const samples = curve.getSpacedPoints(1500);
+  samples.pop(); // last point duplicates the first on a closed curve
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const n = samples.length;
+
+  for (let i = 0; i < n; i++) {
+    const prev = samples[(i - 1 + n) % n];
+    const next = samples[(i + 1) % n];
+    const tangent = next.clone().sub(prev).normalize();
+    const side = new THREE.Vector3().crossVectors(tangent, up).normalize().multiplyScalar(width / 2);
+
+    const left = samples[i].clone().add(side);
+    const right = samples[i].clone().sub(side);
+    positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+
+    // Two triangles connecting this pair to the next pair (wrapping at the end)
+    const a = 2 * i;
+    const b = 2 * i + 1;
+    const c = 2 * ((i + 1) % n);
+    const d = 2 * ((i + 1) % n) + 1;
+    indices.push(a, b, c, b, d, c);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  const material = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
+  return new THREE.Mesh(geometry, material);
 }
 
   ngOnDestroy(): void {
