@@ -8,7 +8,7 @@ Usage:
 
 import argparse
 
-from telemetry.f1 import REPLAYS_DIR, build_race_replay, load_session, save_replay
+from telemetry.f1 import REPLAYS_DIR, build_race_replay, load_session, save_replay, save_metadata, build_metadata, save_laps, build_laps
 
 
 def replay_filename(year, event, session_type):
@@ -38,6 +38,12 @@ def main():
         f"{replay['time'].min():.1f}s to {replay['time'].max():.1f}s"
     )
     print(f"Saved to {path} ({size_mb:.1f} MB)")
+    stem = replay_filename(args.year, args.event, args.session_type).removesuffix(".parquet")
+
+    print("Building metadata and laps...")
+    meta_path = save_metadata(build_metadata(session, replay), REPLAYS_DIR / f"{stem}.meta.json")
+    laps_path = save_laps(build_laps(session), REPLAYS_DIR / f"{stem}.laps.json")
+    print(f"Saved {meta_path.name} and {laps_path.name}")
 
 
 if __name__ == "__main__":

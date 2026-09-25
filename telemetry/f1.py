@@ -2,6 +2,9 @@ import os
 from pathlib import Path
 import fastf1
 import pandas as pd
+import json
+import math
+import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("TELEMETRY_DATA_DIR", PROJECT_ROOT / "data"))
@@ -69,7 +72,7 @@ def build_race_replay(session, padding_s=60):
 
     replay = pd.concat(frames, ignore_index=True)
 
-    start = session.session_start_time.total_seconds()
+    start = session_start_seconds(session)
     end = session.laps["Time"].max().total_seconds()
 
     replay["time"] = replay["time"] - start
@@ -89,3 +92,100 @@ def save_replay(replay, path):
 
 def load_replay(path):
     return pd.read_parquet(path)
+
+def session_start_seconds(session):
+    """The session clock value (in seconds) treated as time 0 in replays."""
+    return session.session_start_time.total_seconds()
+
+def _json_safe(value):
+    """Convert pandas/NumPy values into plain Python values JSON can store."""
+    if value is None or value is pd.NA:
+        return None
+    if isinstance(value, (np.integer, np.floating, np.bool_)):
+        value = value.item()
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    return value
+
+def build_metadata(session, replay, outline_points=500):
+    """Session info, drivers, time range, and a track outline for the viewer."""
+    results = session.results.sort_values("Position")
+
+    drivers = [
+        {
+            "code": _json_safe(row["Abbreviation"]),
+            #leaderboard details
+            "number": _json_safe(row["DriverNumber"]),
+            "name": _json_safe(row["FullName"]),
+            "team": _json_safe(row["TeamName"]),
+            #color is for rendering car color correctly
+            "color": f"#{row['TeamColor']}" if isinstance(row["TeamColor"], str) else None,
+            #handling when cars "disappear" (end the race)
+            "final_position": _json_safe(row["Position"]),
+            "status": _json_safe(row["Status"]),
+        }
+        for _, row in results.iterrows()
+    ]
+
+    # Track outline: the winner's fastest lap, in meters, thinned to ~outline_points
+    #winner is first row of results
+    winner = results.iloc[0]["Abbreviation"]
+    lap = session.laps.pick_drivers(winner).pick_fastest()
+    pos = lap.get_pos_data()
+    step = max(1, len(pos) // outline_points)
+    outline = [
+        [round(x / 10, 2), round(y / 10, 2), round(z / 10, 2)]
+        for x, y, z in pos[["X", "Y", "Z"]].to_numpy()[::step]
+    ]
+
+    return {
+        "session": {
+            "year": int(session.date.year),
+            "event": _json_safe(session.event["EventName"]),
+            "location": _json_safe(session.event["Location"]),
+            "name": session.name,
+            "date": _json_safe(session.date),
+        },
+        "time_range": {
+            "start": float(replay["time"].min()),
+            "end": float(replay["time"].max()),
+        },
+        "drivers": drivers,
+        "track_outline": outline,
+    }
+def build_laps(session):
+    """One row per driver per lap, with times on the replay clock (seconds)."""
+    laps = session.laps
+    offset = session_start_seconds(session)
+
+    def seconds(col):
+        return laps[col].dt.total_seconds()
+
+    return pd.DataFrame({
+        "driver": laps["Driver"],
+        "lap": laps["LapNumber"].astype("Int16"),
+        "lap_time": seconds("LapTime"),
+        "lap_end": seconds("Time") - offset,
+        "position": laps["Position"].astype("Int8"),
+        "compound": laps["Compound"],
+        "tyre_life": laps["TyreLife"],
+        "stint": laps["Stint"].astype("Int8"),
+        "pit_in": seconds("PitInTime") - offset,
+        "pit_out": seconds("PitOutTime") - offset,
+    })
+def save_metadata(metadata, path):
+    """Save metadata as JSON."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(metadata, indent=2))
+    return path
+
+
+def save_laps(laps, path):
+    """Save lap data as JSON (one object per lap; missing values become null)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    laps.to_json(path, orient="records", indent=2)
+    return path
