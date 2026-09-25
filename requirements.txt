@@ -71,7 +71,6 @@ signalrcore==1.0.2
 six==1.17.0
 stack-data==0.6.3
 starlette==1.7.0
--e git+https://github.com/vhittuvalli/telemetry-platform.git@3822daee356faf02ca9457ef41d982eca3d8ddbd#egg=telemetry
 timple==0.1.8
 tornado==6.5.10
 traitlets==5.16.1
