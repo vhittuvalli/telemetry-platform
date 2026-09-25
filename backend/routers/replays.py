@@ -2,6 +2,7 @@ from functools import lru_cache
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from telemetry.f1 import REPLAYS_DIR, load_replay
+import json
 
 #establish endpoint formatting
 router = APIRouter(prefix="/replays", tags=["replays"])
@@ -52,3 +53,31 @@ def get_replay_data(
         }
 
     return {"replay_id": replay_id, "start": start, "end": end, "vehicles": vehicles}
+
+def replay_file(replay_id: str, suffix: str):
+    """Path to one of a replay's files, or a 404 if it doesn't exist."""
+    path = REPLAYS_DIR / f"{replay_id}{suffix}"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"No {suffix} file for replay '{replay_id}'")
+    return path
+
+
+@lru_cache(maxsize=8)
+def read_json(replay_id: str, suffix: str):
+    """Load a replay's JSON file once and keep it in memory."""
+    return json.loads(replay_file(replay_id, suffix).read_text())
+
+
+@router.get("/{replay_id}/meta")
+def get_replay_meta(replay_id: str):
+    """Session info, drivers, time range, and track outline."""
+    return read_json(replay_id, ".meta.json")
+
+
+@router.get("/{replay_id}/laps")
+def get_replay_laps(replay_id: str, driver: str | None = None):
+    """Lap-by-lap data for every driver, optionally filtered to one driver."""
+    laps = read_json(replay_id, ".laps.json")
+    if driver is not None:
+        laps = [lap for lap in laps if lap["driver"] == driver]
+    return laps
