@@ -124,6 +124,7 @@ def build_metadata(session, replay, outline_points=500):
             "color": f"#{row['TeamColor']}" if isinstance(row["TeamColor"], str) else None,
             #handling when cars "disappear" (end the race)
             "final_position": _json_safe(row["Position"]),
+            "grid_position": _json_safe(row["GridPosition"]),
             "status": _json_safe(row["Status"]),
         }
         for _, row in results.iterrows()

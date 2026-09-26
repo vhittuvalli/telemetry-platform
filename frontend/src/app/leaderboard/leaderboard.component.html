@@ -1,0 +1,21 @@
+<div class="board">
+  <div class="header">{{ lap() }}</div>
+  <div class="rows">
+    @for (row of rows(); track row.code) {
+      <div
+        class="row"
+        [class.selected]="row.code === selected()"
+        [class.out]="row.status === 'OUT'"
+        (click)="select.emit(row.code)"
+      >
+        <span class="pos">{{ row.position }}</span>
+        <span class="team" [style.background]="row.color"></span>
+        <span class="code">{{ row.code }}</span>
+        <span class="gap" [class.pit]="row.status === 'PIT'">
+          {{ row.status === 'RUN' ? row.gap : row.status }}
+        </span>
+        <span class="tyre" [attr.data-compound]="row.compound">{{ row.compound?.[0] ?? '' }}</span>
+      </div>
+    }
+  </div>
+</div>
