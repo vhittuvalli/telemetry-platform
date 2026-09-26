@@ -1,4 +1,3 @@
-//interfaces mirror meta.json
 export interface SessionInfo {
   year: number;
   event: string;
@@ -14,6 +13,7 @@ export interface Driver {
   team: string;
   color: string | null;
   final_position: number | null;
+  grid_position: number | null;
   status: string | null;
 }
 
@@ -41,4 +41,17 @@ export interface ReplayDataWindow {
   start: number;
   end: number;
   vehicles: Record<string, VehicleSeries>;
+}
+
+export interface LapRecord {
+  driver: string;
+  lap: number;
+  lap_time: number | null;
+  lap_end: number | null;
+  position: number | null;
+  compound: string | null;
+  tyre_life: number | null;
+  stint: number | null;
+  pit_in: number | null;
+  pit_out: number | null;
 }

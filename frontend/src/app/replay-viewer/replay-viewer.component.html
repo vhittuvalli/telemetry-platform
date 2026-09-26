@@ -1,6 +1,15 @@
 <canvas #canvas tabindex="0"></canvas>
 
 @if (timeRange(); as range) {
+  @if (standings().length) {
+    <app-leaderboard
+      [rows]="standings()"
+      [lap]="lapText()"
+      [selected]="selectedDriver()"
+      (select)="selectDriver($event)"
+    />
+  }
+
   <div class="controls">
     <button class="play" (click)="togglePlay()">
       {{ playing() ? '❚❚' : '▶' }}
@@ -26,8 +35,8 @@
       }
     </div>
 
-    <button (click)="resetView()">Reset view</button>
     <button [class.active]="showLabels()" (click)="toggleLabels()">Labels</button>
+    <button (click)="resetView()">Reset view</button>
   </div>
 } @else {
   <div class="loading">Loading race data…</div>
