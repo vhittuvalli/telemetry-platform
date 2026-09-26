@@ -1,5 +1,6 @@
 :host {
   display: block;
+  position: relative;
   width: 100vw;
   height: 100vh;
 }
@@ -8,4 +9,67 @@ canvas {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+canvas:focus {
+  outline: none;
+}
+
+.controls {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  width: min(900px, 90vw);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(20, 20, 20, 0.8);
+  border-radius: 10px;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.timeline {
+  flex: 1;
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+  min-width: 48px;
+  text-align: center;
+}
+
+button {
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+
+  &:hover { background: #444; }
+  &.active { background: #e10600; }
+}
+
+.play {
+  width: 40px;
+}
+
+.speeds {
+  display: flex;
+  gap: 4px;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 18px;
+  pointer-events: none;
 }

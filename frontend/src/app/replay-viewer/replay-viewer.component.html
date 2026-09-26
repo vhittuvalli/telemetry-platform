@@ -1,1 +1,33 @@
-<canvas #canvas></canvas>
+<canvas #canvas tabindex="0"></canvas>
+
+@if (timeRange(); as range) {
+  <div class="controls">
+    <button class="play" (click)="togglePlay()">
+      {{ playing() ? '❚❚' : '▶' }}
+    </button>
+
+    <span class="time">{{ formatTime(currentTime()) }}</span>
+
+    <input
+      class="timeline"
+      type="range"
+      [min]="range.start"
+      [max]="range.end"
+      step="0.1"
+      [value]="currentTime()"
+      (input)="onSeek($event)"
+    />
+
+    <span class="time">{{ formatTime(range.end) }}</span>
+
+    <div class="speeds">
+      @for (s of speeds; track s) {
+        <button [class.active]="speed() === s" (click)="setSpeed(s)">{{ s }}×</button>
+      }
+    </div>
+
+    <button (click)="resetView()">Reset view</button>
+  </div>
+} @else {
+  <div class="loading">Loading race data…</div>
+}
