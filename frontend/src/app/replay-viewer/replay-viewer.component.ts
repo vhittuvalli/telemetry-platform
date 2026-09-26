@@ -6,6 +6,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { inject } from '@angular/core';
 import { ReplayApiService } from '../replay/replay-api.service';
 import { ReplayMeta } from '../replay/replay.models';
+import { forkJoin } from 'rxjs';
+import { PlaybackClock } from '../replay/playback-clock';
+import { VehicleTrack } from '../replay/vehicle-track';
 
 @Component({
   selector: 'app-replay-viewer',
@@ -25,6 +28,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private api = inject(ReplayApiService);
   private replayId = 'monza_2024_r';
   private ground!: THREE.Mesh;
+  private clock?: PlaybackClock;
+  private tracks = new Map<string, VehicleTrack>();
+  private cars = new Map<string, THREE.Mesh>();
+  private frameTimer = new THREE.Clock();
 
   constructor(private zone: NgZone) {}
 
@@ -65,10 +72,15 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   }
 
   private animate = (): void => {
-    this.frameId = requestAnimationFrame(this.animate);
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
-  };
+  this.frameId = requestAnimationFrame(this.animate);
+  const dt = Math.min(this.frameTimer.getDelta(), 0.1);
+  if (this.clock) {
+    this.clock.tick(dt);
+    this.updateCars(this.clock.time);
+  }
+  this.controls.update();
+  this.renderer.render(this.scene, this.camera);
+};
 
   private resize(): void {
     const canvas = this.canvasRef.nativeElement;
@@ -82,6 +94,59 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   /** Convert data coordinates (Z-up) to three.js coordinates (Y-up). */
 private toScene([x, y, z]: [number, number, number]): THREE.Vector3 {
   return new THREE.Vector3(x, z, -y);
+}
+private loadReplayData(meta: ReplayMeta): void {
+  const { start, end } = meta.time_range;
+  const chunk = 300; // matches the backend's max window
+  const requests = [];
+  for (let s = start; s < end; s += chunk) {
+    requests.push(this.api.getData(this.replayId, s, Math.min(s + chunk, end + 1)));
+  }
+
+  forkJoin(requests).subscribe({
+    next: (windows) => {
+      for (const w of windows) {
+        for (const [id, series] of Object.entries(w.vehicles)) {
+          const existing = this.tracks.get(id);
+          if (existing) existing.append(series);
+          else this.tracks.set(id, new VehicleTrack(id, series));
+        }
+      }
+      this.createCars(meta);
+      this.clock = new PlaybackClock(start, end);
+      this.clock.seek(0);
+      this.clock.playing = true;
+    },
+    error: (err) => console.error('Failed to load replay data', err),
+  });
+}
+
+private createCars(meta: ReplayMeta): void {
+  for (const driver of meta.drivers) {
+    if (!this.tracks.has(driver.code)) continue;
+    const color = driver.color ?? '#ffffff';
+    const car = new THREE.Mesh(
+      new THREE.BoxGeometry(12, 3, 5), // length, height, width in meters
+      new THREE.MeshStandardMaterial({ color }),
+    );
+    car.visible = false;
+    this.scene.add(car);
+    this.cars.set(driver.code, car);
+  }
+}
+
+private updateCars(t: number): void {
+  for (const [id, car] of this.cars) {
+    const state = this.tracks.get(id)!.stateAt(t);
+    if (!state || !state.onTrack) {
+      car.visible = false;
+      continue;
+    }
+    car.visible = true;
+    car.position.copy(this.toScene([state.x, state.y, state.z]));
+    car.position.y += 0.5; // sit on top of the road
+    car.rotation.y = state.heading; // turn to face the direction of travel
+  }
 }
 
 private buildTrack(meta: ReplayMeta): void {
@@ -106,6 +171,7 @@ private buildTrack(meta: ReplayMeta): void {
 
   // Put the ground just below the lowest point of the track
   this.ground.position.set(center.x, box.min.y - 0.5, center.z);
+  this.loadReplayData(meta);
 }
 private buildRoad(points: THREE.Vector3[], width = 12): THREE.Mesh {
   // Smooth the outline and resample it to evenly spaced points
