@@ -27,6 +27,7 @@
     </div>
 
     <button (click)="resetView()">Reset view</button>
+    <button [class.active]="showLabels()" (click)="toggleLabels()">Labels</button>
   </div>
 } @else {
   <div class="loading">Loading race data…</div>

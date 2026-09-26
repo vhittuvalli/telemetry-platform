@@ -8,6 +8,7 @@ import { ReplayApiService } from '../replay/replay-api.service';
 import { ReplayDataWindow, ReplayMeta } from '../replay/replay.models';
 import { PlaybackClock } from '../replay/playback-clock';
 import { VehicleTrack } from '../replay/vehicle-track';
+import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 @Component({
   selector: 'app-replay-viewer',
@@ -28,6 +29,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private frameId = 0;
   private frameTimer = new THREE.Clock();
   private resizeObserver?: ResizeObserver;
+  private labelRenderer!: CSS2DRenderer;
+  private labels = new Map<string, CSS2DObject>();
+  private host = inject(ElementRef<HTMLElement>);
+  protected showLabels = signal(true);
 
   // replay data
   private api = inject(ReplayApiService);
@@ -53,6 +58,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.labelRenderer = new CSS2DRenderer();
+    const labelLayer = this.labelRenderer.domElement;
+    labelLayer.classList.add('label-layer');
+    this.host.nativeElement.appendChild(labelLayer);
 
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 20000);
     this.camera.position.set(0, 500, 800);
@@ -160,6 +169,8 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
 
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    //draw labels at every frame
+    this.labelRenderer.render(this.scene, this.camera);
   };
 
   private resize(): void {
@@ -169,6 +180,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     if (width === 0 || height === 0) return;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
+    this.labelRenderer.setSize(width, height);
     this.camera.updateProjectionMatrix();
   }
 
@@ -303,22 +315,39 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
       );
       car.visible = false;
       this.scene.add(car);
+      const el = document.createElement('div');
+      el.className = 'car-label';
+      el.textContent = driver.code;
+      el.style.borderLeftColor = color;
+
+      //add labels
+      const label = new CSS2DObject(el);
+      label.position.set(0, 8, 0); // a few meters above the car
+      car.add(label);
+      this.labels.set(driver.code, label);
       this.cars.set(driver.code, car);
     }
   }
 
   private updateCars(t: number): void {
+    //sync labels with cars
     for (const [id, car] of this.cars) {
       const state = this.tracks.get(id)!.stateAt(t);
+      const label = this.labels.get(id)!;
       if (!state || !state.onTrack) {
         car.visible = false;
+        label.visible = false;
         continue;
       }
       car.visible = true;
+      label.visible = this.showLabels();
       car.position.copy(this.toScene([state.x, state.y, state.z]));
       car.position.y += 1.5; // half the box height, so it sits on the road
       car.rotation.y = state.heading; // face the direction of travel
     }
+  }
+  protected toggleLabels(): void {
+    this.showLabels.update((v) => !v);
   }
 
   // ---------- cleanup ----------
@@ -328,5 +357,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.resizeObserver?.disconnect();
     this.controls?.dispose();
     this.renderer?.dispose();
+    //remove labels
+    this.labelRenderer?.domElement.remove();
   }
 }

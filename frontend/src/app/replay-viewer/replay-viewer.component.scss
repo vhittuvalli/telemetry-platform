@@ -30,6 +30,8 @@ canvas:focus {
   color: #fff;
   font-family: system-ui, sans-serif;
   font-size: 14px;
+  //control bar should sit above labels
+  z-index: 2;
 }
 
 .timeline {
@@ -72,4 +74,5 @@ button {
   font-family: system-ui, sans-serif;
   font-size: 18px;
   pointer-events: none;
+  z-index: 2;
 }
