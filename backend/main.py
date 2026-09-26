@@ -5,9 +5,11 @@ from backend.routers import replays
 router so its easier to compile in main.py"""
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 app = FastAPI(title="Telemetry Platform API")
 app.include_router(replays.router)
+app.add_middleware(GZipMiddleware, minimum_size=1000) #compress API responses
 
 app.add_middleware(
     CORSMiddleware,

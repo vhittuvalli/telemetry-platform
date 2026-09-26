@@ -23,3 +23,22 @@ export interface ReplayMeta {
   drivers: Driver[];
   track_outline: [number, number, number][];
 }
+
+export interface VehicleSeries {
+  time: number[];
+  x: number[];
+  y: number[];
+  z: number[];
+  speed: (number | null)[];
+  throttle: (number | null)[];
+  brake: (number | null)[];
+  gear: (number | null)[];
+  on_track: boolean[];
+}
+
+export interface ReplayDataWindow {
+  replay_id: string;
+  start: number;
+  end: number;
+  vehicles: Record<string, VehicleSeries>;
+}
