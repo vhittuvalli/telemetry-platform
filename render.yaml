@@ -1,0 +1,14 @@
+# Render Blueprint: New > Blueprint in the Render dashboard, then pick this repo.
+services:
+  - type: web
+    name: telemetry-platform
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # 512 MB on the free plan isn't enough to build replays; serve the ones baked into the image
+      - key: ALLOW_BUILDS
+        value: "false"
+      - key: REPLAY_CACHE_SIZE
+        value: "2"

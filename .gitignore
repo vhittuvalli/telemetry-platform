@@ -6,3 +6,4 @@ data/
 .DS_Store
 node_modules/
 *.egg-info/
+.env

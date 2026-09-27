@@ -4,8 +4,9 @@ import { Observable } from 'rxjs';
 import {
   BuildJob, CatalogEvent, LapRecord, ReplayDataWindow, ReplayMeta, ReplaySummary,
 } from './replay.models';
+import { environment } from '../../environments/environment';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = environment.apiUrl;
 //sets up the API service
 
 @Injectable({ providedIn: 'root' })
@@ -33,6 +34,9 @@ export class ReplayApiService {
   }
   getSeason(year: number): Observable<CatalogEvent[]> {
     return this.http.get<CatalogEvent[]>(`${API_URL}/catalog/${year}`);
+  }
+  getBuildConfig(): Observable<{ enabled: boolean }> {
+    return this.http.get<{ enabled: boolean }>(`${API_URL}/builds/config`);
   }
   startBuild(year: number, round: number, session: string): Observable<BuildJob> {
     return this.http.post<BuildJob>(`${API_URL}/builds`, { year, round, session });

@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from telemetry.f1 import REPLAYS_DIR, load_replay
@@ -8,8 +9,10 @@ import json
 router = APIRouter(prefix="/replays", tags=["replays"])
 #max window from start to end time (seconds)
 MAX_WINDOW_S = 300
+#replays held in memory; a race is roughly 40 MB of data plus pandas overhead, so lower this on small hosts
+REPLAY_CACHE_SIZE = int(os.environ.get("REPLAY_CACHE_SIZE", 4))
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=REPLAY_CACHE_SIZE)
 def get_replay(replay_id: str) -> pd.DataFrame:
     """Load a replay once and keep it in memory. (utilize LRU cache)"""
     path = REPLAYS_DIR / f"{replay_id}.parquet"

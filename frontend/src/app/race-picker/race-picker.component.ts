@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, inject, input, output, signal } from '@angular/core';
-import { Subscription, switchMap, takeWhile, timer } from 'rxjs';
+import { Subscription, filter, switchMap, takeWhile, tap, timer } from 'rxjs';
 import { ReplayApiService } from '../replay/replay-api.service';
 import {
   BuildJob, CatalogEvent, CatalogSession, ReplaySummary,
@@ -23,6 +23,7 @@ export class RacePickerComponent implements OnInit, OnDestroy {
   close = output<void>();
   built = output<void>(); // a new replay finished building
 
+  protected buildsEnabled = signal(false);
   protected seasons = signal<number[]>([]);
   protected year = signal<number | null>(null);
   protected events = signal<CatalogEvent[] | null>(null);
@@ -34,12 +35,17 @@ export class RacePickerComponent implements OnInit, OnDestroy {
   private watching = new Set<string>(); // build ids being polled
 
   ngOnInit(): void {
-    this.subs.add(this.api.getSeasons().subscribe({
+    // The FastF1 catalog is only useful when this server can build replays
+    this.subs.add(this.api.getBuildConfig().pipe(
+      filter((config) => config.enabled),
+      tap(() => this.buildsEnabled.set(true)),
+      switchMap(() => this.api.getSeasons()),
+    ).subscribe({
       next: (years) => {
         this.seasons.set(years);
         this.loadSeason(years[0]);
       },
-      error: () => this.error.set('Could not reach the backend. Is it running on port 8000?'),
+      error: () => this.error.set('Could not reach the backend. Is it running?'),
     }));
   }
 

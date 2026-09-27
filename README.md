@@ -38,6 +38,7 @@ telemetry_platform/
 │   └── f1.py           # FastF1 pipeline: load, merge, standardize, export
 ├── scripts/
 │   └── build_replay.py # CLI to build a replay file for a session
+├── seed/replays/       # Replays baked into the deploy image
 ├── notebooks/          # Exploration and verification
 ├── docs/
 │   └── data-format.md  # Replay data format specification
@@ -60,9 +61,12 @@ cd telemetry_platform
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime deps + Jupyter for the notebooks
 pip install -e .
 ```
+
+`requirements.txt` holds only what the server needs; `requirements-dev.txt` adds
+the notebook tooling on top.
 
 ### Build a replay
 
@@ -91,6 +95,50 @@ later runs use the local cache in `data/cache/`. The replay is saved to
 `data/replays/` as three files named after the official event name, e.g.
 `italian_grand_prix_2024_r.parquet`, `.meta.json` and `.laps.json`.
 
+## Deployment
+
+The `Dockerfile` builds a single image: the Angular app is compiled and served by
+FastAPI alongside the API, so there is one service on one port and no CORS setup.
+Replays in `seed/replays/` are baked into the image, so a fresh deploy has
+sessions to watch before anything is built.
+
+### Render (free)
+
+`render.yaml` is a Render Blueprint. In the Render dashboard choose
+**New → Blueprint**, pick this repo, and apply. Every push to `main` redeploys.
+
+The free plan has 512 MB of RAM, sleeps after 15 minutes idle (the next visit
+takes about a minute to wake it), and has no persistent disk. On-demand builds
+don't fit in that memory, so the blueprint sets `ALLOW_BUILDS=false` and the
+race picker only lists the seeded replays. To publish a new session, build it
+locally, copy its three files into `seed/replays/`, and push.
+
+### Anywhere else
+
+```bash
+docker build -t telemetry-platform .
+docker run -p 8000:8000 -v telemetry-data:/data telemetry-platform
+```
+
+Then open http://localhost:8000. Mount a persistent volume at `/data`: it holds
+the FastF1 cache and built replays, which are slow to recreate.
+
+| Variable             | Default                  | Purpose                                              |
+|----------------------|--------------------------|------------------------------------------------------|
+| `PORT`               | `8000`                   | Port uvicorn listens on (most hosts set this)        |
+| `TELEMETRY_DATA_DIR` | `/data`                  | FastF1 cache and replay files                        |
+| `ALLOW_BUILDS`       | `true`                   | `false` hides the FastF1 catalog and rejects builds  |
+| `REPLAY_CACHE_SIZE`  | `4`                      | Replays kept in memory (use 2 on a 512 MB host)      |
+| `CORS_ORIGINS`       | `http://localhost:4200`  | Comma-separated origins, only if the frontend is hosted separately |
+
+Notes:
+- Run **one** instance with one worker. Build jobs and replay caches live in
+  process memory, so they aren't shared across workers or replicas.
+- `GET /health` is the health check endpoint.
+- With builds on, anyone who can reach the site can start one (`POST /builds`),
+  which downloads from FastF1 and uses a lot of CPU and memory. Builds run one
+  at a time, but the queue has no limit.
+
 ## Data format
 
 Replays use a long format: one row per car per sample, with time in seconds and
@@ -102,7 +150,7 @@ specification.
 1. ✅ Data pipeline: FastF1 → standardized race replay
 2. ⏳ Backend API (FastAPI)
 3. ⏳ 3D replay viewer (Angular + three.js)
-4. ⏳ Deployment
+4. ⏳ Deployment (Docker image ready)
 5. Later: race catalog, uploads, rocket simulator
 
 ## Disclaimer

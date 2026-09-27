@@ -1,5 +1,6 @@
 """What FastF1 can offer (seasons, events, sessions) and on-demand replay builds."""
 
+import os
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -17,6 +18,9 @@ builds_router = APIRouter(prefix="/builds", tags=["builds"])
 SCHEDULE_TTL_S = 6 * 3600
 #live timing data usually lands within an hour of a session ending; leave room for long races
 DATA_DELAY = timedelta(hours=4)
+
+#builds download and process whole sessions; turn them off on small hosts that can't afford the memory
+BUILDS_ENABLED = os.environ.get("ALLOW_BUILDS", "true").lower() not in ("0", "false", "no")
 
 _schedules: dict[int, tuple[float, list[dict]]] = {}
 
@@ -94,9 +98,16 @@ class BuildRequest(BaseModel):
     session: str  # session code, e.g. "R" or "FP1"
 
 
+@builds_router.get("/config")
+def build_config():
+    return {"enabled": BUILDS_ENABLED}
+
+
 @builds_router.post("", status_code=202)
 def start_build(req: BuildRequest):
     """Download a session from FastF1 and build its replay in the background."""
+    if not BUILDS_ENABLED:
+        raise HTTPException(status_code=403, detail="Replay builds are turned off on this server")
     event = next((e for e in schedule(req.year) if e["round"] == req.round), None)
     if event is None:
         raise HTTPException(status_code=404, detail=f"No round {req.round} in {req.year}")
