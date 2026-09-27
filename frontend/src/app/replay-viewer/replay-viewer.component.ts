@@ -434,6 +434,7 @@ private updateFollowCamera(dt: number): void {
             else this.tracks.set(id, new VehicleTrack(id, series));
           }
         }
+        for (const track of this.tracks.values()) track.finalize();
         this.createCars(meta);
         this.clock = new PlaybackClock(start, end);
         this.clock.seek(0);
@@ -495,7 +496,45 @@ private updateFollowCamera(dt: number): void {
         car.scale.setScalar(1);
       }
     }
+    this.separateCars();
   }
+  /** Nudge overlapping cars apart sideways. Visual only; race order is unaffected. */
+private separateCars(): void {
+  const CAR_LENGTH = 5.6;
+  const CAR_WIDTH = 2.1;
+  const active: THREE.Object3D[] = [];
+  for (const [id, car] of this.cars) {
+    if (this.onTrack.has(id)) active.push(car);
+  }
+
+  for (let pass = 0; pass < 2; pass++) {
+    for (let a = 0; a < active.length; a++) {
+      for (let b = a + 1; b < active.length; b++) {
+        const A = active[a];
+        const B = active[b];
+        const dx = B.position.x - A.position.x;
+        const dz = B.position.z - A.position.z;
+        if (dx * dx + dz * dz > 36) continue; // more than 6 m apart: can't overlap
+
+        // Measure the offset in A's frame: along its length and across its width
+        const h = A.rotation.y;
+        const fx = Math.cos(h), fz = -Math.sin(h);   // forward
+        const sx = Math.sin(h), sz = Math.cos(h);    // sideways
+        const along = dx * fx + dz * fz;
+        const across = dx * sx + dz * sz;
+        if (Math.abs(along) >= CAR_LENGTH || Math.abs(across) >= CAR_WIDTH) continue;
+
+        // Push each car half the overlap, in opposite sideways directions
+        const push = (CAR_WIDTH - Math.abs(across)) / 2;
+        const dir = across >= 0 ? 1 : -1;
+        A.position.x -= sx * push * dir;
+        A.position.z -= sz * push * dir;
+        B.position.x += sx * push * dir;
+        B.position.z += sz * push * dir;
+      }
+    }
+  }
+}
 
   // ---------- cleanup ----------
 
