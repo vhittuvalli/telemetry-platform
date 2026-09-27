@@ -1,5 +1,6 @@
 from functools import lru_cache
 import os
+import threading
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from telemetry.f1 import REPLAYS_DIR, load_replay
@@ -11,15 +12,27 @@ router = APIRouter(prefix="/replays", tags=["replays"])
 MAX_WINDOW_S = 300
 #replays held in memory; a race is roughly 40 MB of data plus pandas overhead, so lower this on small hosts
 REPLAY_CACHE_SIZE = int(os.environ.get("REPLAY_CACHE_SIZE", 4))
+#windows serialized at once; the viewer requests a whole session in parallel, which can exhaust a small host's memory
+DATA_CONCURRENCY = int(os.environ.get("DATA_CONCURRENCY", 2))
+
+_load_lock = threading.Lock()
+_data_slots = threading.BoundedSemaphore(DATA_CONCURRENCY)
+
 
 @lru_cache(maxsize=REPLAY_CACHE_SIZE)
-def get_replay(replay_id: str) -> pd.DataFrame:
-    """Load a replay once and keep it in memory. (utilize LRU cache)"""
+def _load(replay_id: str) -> pd.DataFrame:
     path = REPLAYS_DIR / f"{replay_id}.parquet"
     #check if replay exists
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Replay '{replay_id}' not found")
     return load_replay(path)
+
+
+def get_replay(replay_id: str) -> pd.DataFrame:
+    """Load a replay once and keep it in memory. (utilize LRU cache)"""
+    #lru_cache doesn't stop parallel misses from each loading the same file
+    with _load_lock:
+        return _load(replay_id)
 
 
 def column_to_list(series: pd.Series) -> list:
@@ -68,14 +81,15 @@ def get_replay_data(
         raise HTTPException(status_code=400, detail=f"Window cannot exceed {MAX_WINDOW_S} seconds")
 
     replay = get_replay(replay_id)
-    window = replay[(replay["time"] >= start) & (replay["time"] < end)]
+    with _data_slots:
+        window = replay[(replay["time"] >= start) & (replay["time"] < end)]
 
-    #group by driver
-    vehicles = {}
-    for vehicle_id, rows in window.groupby("vehicle_id"):
-        vehicles[vehicle_id] = {
-            col: column_to_list(rows[col]) for col in rows.columns if col != "vehicle_id"
-        }
+        #group by driver
+        vehicles = {}
+        for vehicle_id, rows in window.groupby("vehicle_id"):
+            vehicles[vehicle_id] = {
+                col: column_to_list(rows[col]) for col in rows.columns if col != "vehicle_id"
+            }
 
     return {"replay_id": replay_id, "start": start, "end": end, "vehicles": vehicles}
 
