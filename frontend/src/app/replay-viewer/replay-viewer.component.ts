@@ -13,6 +13,7 @@ import { VehicleTrack } from '../replay/vehicle-track';
 import { DriverLaps, computeStandings, indexLaps } from '../replay/standings';
 import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
 import { createCarModel } from '../replay/car-model';
+import { TrackLayout, buildEnvironment, buildRoad } from '../replay/track-builder';
 
 @Component({
   selector: 'app-replay-viewer',
@@ -306,23 +307,19 @@ private updateFollowCamera(dt: number): void {
     this.outline = meta.track_outline.map(([x, y]) => [x, y] as [number, number]);
 
     const points = meta.track_outline.map((p) => this.toScene(p));
-    points.push(points[0].clone()); // close the loop
 
-    // Center line, drawn just above the road
-    const linePoints = points.map((p) => p.clone().setY(p.y + 0.2));
-    const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
-    const material = new THREE.LineBasicMaterial({ color: 0xffffff });
-    this.scene.add(new THREE.Line(geometry, material));
-    this.scene.add(this.buildRoad(points.slice(0, -1)));
+    // Road and surroundings, built from the smoothed track layout
+    const layout = new TrackLayout(points);
+    this.scene.add(buildRoad(layout));
+    this.scene.add(buildEnvironment(layout));
 
     // Frame the camera on the track
-    const box = new THREE.Box3().setFromPoints(points);
-    this.trackBounds = box;
+    this.trackBounds = new THREE.Box3().setFromPoints(points);
     this.fitCameraToTrack();
 
-    // Put the ground just below the lowest point of the track
-    const center = box.getCenter(new THREE.Vector3());
-    this.ground.position.set(center.x, box.min.y - 0.5, center.z);
+    // Ground at the layout's ground height, centered under the track
+    const center = this.trackBounds.getCenter(new THREE.Vector3());
+    this.ground.position.set(center.x, layout.groundY, center.z);
 
     this.loadReplayData(meta);
   }
@@ -349,42 +346,6 @@ private updateFollowCamera(dt: number): void {
     this.camera.position.copy(center).addScaledVector(direction, distance);
     this.controls.target.copy(center);
     this.controls.update();
-  }
-
-  private buildRoad(points: THREE.Vector3[], width = 12): THREE.Mesh {
-    const curve = new THREE.CatmullRomCurve3(points, true);
-    const samples = curve.getSpacedPoints(1500);
-    samples.pop(); // last point duplicates the first on a closed curve
-
-    const up = new THREE.Vector3(0, 1, 0);
-    const positions: number[] = [];
-    const indices: number[] = [];
-    const n = samples.length;
-
-    for (let i = 0; i < n; i++) {
-      const prev = samples[(i - 1 + n) % n];
-      const next = samples[(i + 1) % n];
-      const tangent = next.clone().sub(prev).normalize();
-      const side = new THREE.Vector3().crossVectors(tangent, up).normalize().multiplyScalar(width / 2);
-
-      const left = samples[i].clone().add(side);
-      const right = samples[i].clone().sub(side);
-      positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
-
-      const a = 2 * i;
-      const b = 2 * i + 1;
-      const c = 2 * ((i + 1) % n);
-      const d = 2 * ((i + 1) % n) + 1;
-      indices.push(a, b, c, b, d, c);
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setIndex(indices);
-    geometry.computeVertexNormals();
-
-    const material = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
-    return new THREE.Mesh(geometry, material);
   }
 
   /** Fraction of the lap (0–1) for a position, from the closest outline point. */
