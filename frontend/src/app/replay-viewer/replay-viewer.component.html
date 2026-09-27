@@ -45,6 +45,8 @@
         <button [class.active]="cameraMode() === 'onboard'" [disabled]="!selectedDriver()" (click)="setCameraMode('onboard')">Onboard</button>
     </div>
   </div>
-} @else {
+} @else if (loadError()) {
+  <div class="loading">{{ loadError() }}</div>
+} @else if (replayId()) {
   <div class="loading">Loading race data…</div>
 }

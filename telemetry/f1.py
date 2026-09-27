@@ -1,4 +1,6 @@
 import os
+import re
+import unicodedata
 from pathlib import Path
 import fastf1
 import pandas as pd
@@ -10,10 +12,29 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("TELEMETRY_DATA_DIR", PROJECT_ROOT / "data"))
 CACHE_DIR = DATA_DIR / "cache"
 
+#FastF1 only has position/car telemetry from 2018 onward
+FIRST_TELEMETRY_YEAR = 2018
+
+#schedule session names -> the short codes fastf1.get_session accepts
+SESSION_CODES = {
+    "Practice 1": "FP1",
+    "Practice 2": "FP2",
+    "Practice 3": "FP3",
+    "Qualifying": "Q",
+    "Sprint Qualifying": "SQ",
+    "Sprint Shootout": "SS",
+    "Sprint": "S",
+    "Race": "R",
+}
+
 fastf1.set_log_level("WARNING")
-def load_session(year, event, session_type):
+
+def enable_cache():
     CACHE_DIR.mkdir(parents=True, exist_ok=True) #make cache directory
     fastf1.Cache.enable_cache(CACHE_DIR) #set cache directory
+
+def load_session(year, event, session_type):
+    enable_cache()
 
     session = fastf1.get_session(year, event, session_type) #define session
     session.load(laps=True, telemetry=True, weather=False, messages=True) #get session (check if already in cache first)
@@ -130,10 +151,11 @@ def build_metadata(session, replay, outline_points=500):
         for _, row in results.iterrows()
     ]
 
-    # Track outline: the winner's fastest lap, in meters, thinned to ~outline_points
-    #winner is first row of results
-    winner = results.iloc[0]["Abbreviation"]
-    lap = session.laps.pick_drivers(winner).pick_fastest()
+    # Track outline: the session's fastest lap, in meters, thinned to ~outline_points
+    #(not the winner's, since practice sessions have no finishing order)
+    lap = session.laps.pick_fastest()
+    if lap is None:
+        raise ValueError("Session has no timed laps to build a track outline from")
     pos = lap.get_pos_data()
     step = max(1, len(pos) // outline_points)
     outline = [
@@ -190,3 +212,64 @@ def save_laps(laps, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     laps.to_json(path, orient="records", indent=2)
     return path
+
+def get_schedule(year):
+    """Every event in a season that FastF1 has telemetry for, with its sessions."""
+    enable_cache()
+    schedule = fastf1.get_event_schedule(year, include_testing=False)
+
+    events = []
+    for _, row in schedule.iterrows():
+        if not row["F1ApiSupport"]:
+            continue #no timing/telemetry data for this event
+        sessions = []
+        for i in range(1, 6):
+            name = row[f"Session{i}"]
+            if name not in SESSION_CODES:
+                continue
+            date = row[f"Session{i}DateUtc"]
+            sessions.append({
+                "code": SESSION_CODES[name],
+                "name": name,
+                "date_utc": None if pd.isna(date) else date.isoformat(),
+            })
+        events.append({
+            "round": int(row["RoundNumber"]),
+            "name": row["EventName"],
+            "location": row["Location"],
+            "country": row["Country"],
+            "date": row["EventDate"].date().isoformat(),
+            "sessions": sessions,
+        })
+    return events
+
+
+def slugify(text):
+    """'São Paulo Grand Prix' -> 'sao_paulo_grand_prix'."""
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+
+def replay_id(year, event_name, session_code):
+    """Replay file stem, e.g. 'italian_grand_prix_2024_r'."""
+    return f"{slugify(event_name)}_{year}_{session_code.lower()}"
+
+
+def build_and_save(year, event, session_type, progress=print):
+    """Load a session and write its replay, metadata and lap files.
+    Returns the replay id. `progress` receives short status messages."""
+    progress("Downloading session data from FastF1")
+    session = load_session(year, event, session_type)
+    stem = replay_id(year, session.event["EventName"], session_type)
+
+    progress("Building replay")
+    replay = build_race_replay(session)
+    meta = build_metadata(session, replay)
+    laps = build_laps(session)
+
+    progress("Saving files")
+    #laps are written last: a replay only counts as built once all three files exist
+    save_replay(replay, REPLAYS_DIR / f"{stem}.parquet")
+    save_metadata(meta, REPLAYS_DIR / f"{stem}.meta.json")
+    save_laps(laps, REPLAYS_DIR / f"{stem}.laps.json")
+    return stem

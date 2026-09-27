@@ -1,11 +1,11 @@
 import {
   AfterViewInit, Component, ElementRef, HostListener, NgZone, OnDestroy, ViewChild,
-  computed, inject, signal,
+  computed, effect, inject, input, signal, untracked,
 } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { Observable, forkJoin } from 'rxjs';
+import { Observable, Subscription, forkJoin } from 'rxjs';
 import { ReplayApiService } from '../replay/replay-api.service';
 import { Driver, ReplayDataWindow, ReplayMeta } from '../replay/replay.models';
 import { PlaybackClock } from '../replay/playback-clock';
@@ -50,7 +50,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
 
   // replay data
   private api = inject(ReplayApiService);
-  private replayId = 'monza_2024_r';
+  replayId = input<string | null>(null);
+  private viewReady = signal(false);
+  private loading = new Subscription();
+  private trackObjects: THREE.Object3D[] = []; // road and scenery for the current track
   private clock?: PlaybackClock;
   private tracks = new Map<string, VehicleTrack>();
   private labels = new Map<string, CSS2DObject>();
@@ -64,6 +67,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   protected timeRange = signal<{ start: number; end: number } | null>(null);
   protected showLabels = signal(true);
   protected selectedDriver = signal<string | null>(null);
+  protected loadError = signal<string | null>(null);
   protected readonly speeds = [1, 2, 5, 10, 20];
   private lastUiUpdate = 0;
 
@@ -98,7 +102,14 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     return `Lap ${Math.min(leaderLaps + 1, total)}/${total}`;
   });
 
-  constructor(private zone: NgZone) {}
+  constructor(private zone: NgZone) {
+    // (Re)load whenever the chosen replay changes, once the renderer exists
+    effect(() => {
+      const id = this.replayId();
+      if (!this.viewReady()) return;
+      untracked(() => this.loadReplay(id));
+    });
+  }
 
   // ---------- setup ----------
 
@@ -144,11 +155,59 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.resize();
 
     this.zone.runOutsideAngular(() => this.animate());
+    this.viewReady.set(true);
+  }
 
-    this.api.getMeta(this.replayId).subscribe({
-      next: (meta) => this.buildTrack(meta),
-      error: (err) => console.error('Failed to load replay metadata', err),
-    });
+  // ---------- loading and switching replays ----------
+
+  private loadReplay(id: string | null): void {
+    this.clearReplay();
+    if (!id) return;
+    this.loading = new Subscription();
+    this.loading.add(this.api.getMeta(id).subscribe({
+      next: (meta) => this.buildTrack(id, meta),
+      error: (err) => this.fail('Failed to load replay metadata', err),
+    }));
+  }
+
+  private fail(message: string, err: unknown): void {
+    console.error(message, err);
+    this.loadError.set(message);
+  }
+
+  /** Remove everything belonging to the current replay and reset the UI. */
+  private clearReplay(): void {
+    this.loading.unsubscribe(); // drop any in-flight requests for the old replay
+
+    for (const obj of [...this.trackObjects, ...this.cars.values()]) {
+      this.scene.remove(obj);
+      disposeObject(obj);
+    }
+    for (const label of this.labels.values()) label.element.remove();
+    this.trackObjects = [];
+    this.cars.clear();
+    this.labels.clear();
+    this.tracks.clear();
+    this.carStates.clear();
+    this.carProgress.clear();
+    this.onTrack.clear();
+    this.outline = [];
+    this.trackBounds = undefined;
+    this.clock = undefined;
+
+    this.currentTime.set(0);
+    this.playing.set(false);
+    this.speed.set(1);
+    this.timeRange.set(null);
+    this.selectedDriver.set(null);
+    this.selectedState.set(null);
+    this.loadError.set(null);
+    this.drivers.set([]);
+    this.lapIndex.set(null);
+    this.totalLaps.set(0);
+    this.cameraMode.set('overview');
+    this.controls.enabled = true;
+    this.followInitialized = false;
   }
 
   // ---------- playback controls ----------
@@ -315,15 +374,15 @@ private updateFollowCamera(dt: number): void {
     return new THREE.Vector3(x, z, -y);
   }
 
-  private buildTrack(meta: ReplayMeta): void {
+  private buildTrack(id: string, meta: ReplayMeta): void {
     this.outline = meta.track_outline.map(([x, y]) => [x, y] as [number, number]);
 
     const points = meta.track_outline.map((p) => this.toScene(p));
 
     // Road and surroundings, built from the smoothed track layout
     const layout = new TrackLayout(points);
-    this.scene.add(buildRoad(layout));
-    this.scene.add(buildEnvironment(layout));
+    this.trackObjects = [buildRoad(layout), buildEnvironment(layout)];
+    this.scene.add(...this.trackObjects);
 
     // Frame the camera on the track
     this.trackBounds = new THREE.Box3().setFromPoints(points);
@@ -333,7 +392,7 @@ private updateFollowCamera(dt: number): void {
     const center = this.trackBounds.getCenter(new THREE.Vector3());
     this.ground.position.set(center.x, layout.groundY, center.z);
 
-    this.loadReplayData(meta);
+    this.loadReplayData(id, meta);
   }
 
   /** Position the camera so the whole track fills the view. */
@@ -378,27 +437,27 @@ private updateFollowCamera(dt: number): void {
 
   // ---------- data and cars ----------
 
-  private loadReplayData(meta: ReplayMeta): void {
+  private loadReplayData(id: string, meta: ReplayMeta): void {
     const { start, end } = meta.time_range;
 
     // Leaderboard data
     this.drivers.set(meta.drivers);
-    this.api.getLaps(this.replayId).subscribe({
+    this.loading.add(this.api.getLaps(id).subscribe({
       next: (laps) => {
         this.lapIndex.set(indexLaps(laps));
-        this.totalLaps.set(Math.max(...laps.map((l) => l.lap)));
+        this.totalLaps.set(Math.max(0, ...laps.map((l) => l.lap)));
       },
-      error: (err) => console.error('Failed to load laps', err),
-    });
+      error: (err) => this.fail('Failed to load laps', err),
+    }));
 
     // Telemetry, in chunks
     const chunk = 300; // matches the backend's max window
     const requests: Observable<ReplayDataWindow>[] = [];
     for (let s = start; s < end; s += chunk) {
-      requests.push(this.api.getData(this.replayId, s, Math.min(s + chunk, end + 1)));
+      requests.push(this.api.getData(id, s, Math.min(s + chunk, end + 1)));
     }
 
-    forkJoin(requests).subscribe({
+    this.loading.add(forkJoin(requests).subscribe({
       next: (windows) => {
         for (const w of windows) {
           for (const [id, series] of Object.entries(w.vehicles)) {
@@ -415,8 +474,8 @@ private updateFollowCamera(dt: number): void {
         this.timeRange.set({ start, end });
         this.playing.set(true);
       },
-      error: (err) => console.error('Failed to load replay data', err),
-    });
+      error: (err) => this.fail('Failed to load replay data', err),
+    }));
   }
 
   private createCars(meta: ReplayMeta): void {
@@ -514,10 +573,23 @@ private separateCars(): void {
   // ---------- cleanup ----------
 
   ngOnDestroy(): void {
+    this.loading.unsubscribe();
     cancelAnimationFrame(this.frameId);
     this.resizeObserver?.disconnect();
     this.controls?.dispose();
     this.renderer?.dispose();
     this.labelRenderer?.domElement.remove();
   }
+}
+/** Free the GPU memory held by an object's meshes. */
+function disposeObject(root: THREE.Object3D): void {
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    obj.geometry.dispose();
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const m of materials) {
+      (m as THREE.MeshStandardMaterial).map?.dispose();
+      m.dispose();
+    }
+  });
 }

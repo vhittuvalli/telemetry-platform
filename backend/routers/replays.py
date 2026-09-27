@@ -23,11 +23,32 @@ def column_to_list(series: pd.Series) -> list:
     """Convert a column to a JSON-safe list, with missing values as None."""
     return series.astype(object).where(series.notna(), None).tolist()
 
+def built_replays() -> list[dict]:
+    """Every fully built replay (all three files present), newest session first."""
+    summaries = []
+    for meta_path in REPLAYS_DIR.glob("*.meta.json"):
+        replay_id = meta_path.name.removesuffix(".meta.json")
+        #the laps file is written last, so its presence means the build finished
+        if not (REPLAYS_DIR / f"{replay_id}.parquet").exists():
+            continue
+        if not (REPLAYS_DIR / f"{replay_id}.laps.json").exists():
+            continue
+        session = read_json(replay_id, ".meta.json")["session"]
+        summaries.append({
+            "id": replay_id,
+            "year": session["year"],
+            "event": session["event"],
+            "location": session["location"],
+            "session": session["name"],
+            "date": session["date"],
+        })
+    return sorted(summaries, key=lambda s: s["date"] or "", reverse=True)
+
+
 @router.get("")
 def list_replays():
-    # list all possible replay sessions that can be used
-    files = sorted(REPLAYS_DIR.glob("*.parquet"))
-    return [{"id": path.stem} for path in files]
+    # list all replay sessions that are ready to watch
+    return built_replays()
 
 @router.get("/{replay_id}/data")
 def get_replay_data(
@@ -39,7 +60,8 @@ def get_replay_data(
     #make sure start is before end and window isn't too big
     if end <= start:
         raise HTTPException(status_code=400, detail="'end' must be greater than 'start'")
-    if end - start > MAX_WINDOW_S:
+    #small tolerance: clients stepping in MAX_WINDOW_S chunks hit float rounding (e.g. 300.0000000000002)
+    if end - start > MAX_WINDOW_S + 1e-6:
         raise HTTPException(status_code=400, detail=f"Window cannot exceed {MAX_WINDOW_S} seconds")
 
     replay = get_replay(replay_id)

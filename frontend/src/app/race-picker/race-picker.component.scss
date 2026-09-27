@@ -1,0 +1,146 @@
+:host {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  font: 13px system-ui, sans-serif;
+  color: #fff;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.panel {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  background: rgba(15, 15, 15, 0.95);
+  border-radius: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h2 { margin: 0; font-size: 18px; }
+h3 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #aaa; }
+
+button, select {
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { background: #444; }
+  &.active { outline: 2px solid #e10600; }
+  &:disabled { cursor: default; }
+}
+
+.ready { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.browse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hint { margin: 0; color: #999; }
+.error { margin: 0; color: #ff6b6b; }
+
+.events {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+
+  &:hover { background: rgba(255, 255, 255, 0.05); }
+  &.future { opacity: 0.45; }
+  .error { flex-basis: 100%; }
+}
+
+.info {
+  flex: 1 1 260px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.round { width: 28px; color: #999; font-variant-numeric: tabular-nums; }
+.name { font-weight: 600; }
+.where { color: #999; font-size: 12px; }
+
+.sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+
+  button {
+    min-width: 44px;
+    padding: 4px 8px;
+    font-size: 12px;
+    border-left: 3px solid transparent;
+  }
+}
+
+// session status colours (also used by the legend)
+.built { border-color: #39b54a !important; background: #1f3a24; }
+.building { border-color: #ffd12e !important; }
+.available { border-color: #666 !important; }
+.upcoming { opacity: 0.4; }
+.failed { border-color: #ff6b6b !important; }
+
+.spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #ffd12e;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: #999;
+  font-size: 12px;
+
+  i {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 5px;
+    border-radius: 2px;
+    border-left: 3px solid;
+    background: #333;
+    vertical-align: -1px;
+  }
+}
