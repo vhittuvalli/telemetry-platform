@@ -61,6 +61,12 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private lapIndex = signal<Map<string, DriverLaps> | null>(null);
   private totalLaps = signal(0);
 
+  //camera view
+  protected cameraMode = signal<'overview' | 'chase' | 'onboard'>('overview');
+  private followHeading = 0;
+  private followInitialized = false;
+  private onTrack = new Set<string>();
+
   protected standings = computed(() => {
     const index = this.lapIndex();
     if (!index) return [];
@@ -159,15 +165,32 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.fitCameraToTrack();
   }
 
+  protected setCameraMode(mode: 'overview' | 'chase' | 'onboard'): void {
+    if (mode !== 'overview' && !this.selectedDriver()) return; // need a driver to follow
+    this.cameraMode.set(mode);
+    this.followInitialized = false;
+    this.controls.enabled = mode === 'overview';
+    if (mode === 'overview') this.fitCameraToTrack();
+  }
+
   protected toggleLabels(): void {
     this.showLabels.update((v) => !v);
   }
 
+  //choosing a driver starts following them
   protected selectDriver(code: string): void {
     const next = this.selectedDriver() === code ? null : code;
     this.selectedDriver.set(next);
     for (const [id, label] of this.labels) {
       label.element.classList.toggle('selected', id === next);
+    }
+
+    if (next === null) {
+      this.setCameraMode('overview');
+    } else if (this.cameraMode() === 'overview') {
+      this.setCameraMode('chase');
+    } else {
+      this.followInitialized = false; // switching drivers: snap to the new car
     }
   }
 
@@ -197,6 +220,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     if (this.clock) {
       this.clock.tick(dt);
       this.updateCars(this.clock.time);
+      this.updateFollowCamera(dt);
 
       const now = performance.now();
       if (now - this.lastUiUpdate > 100) {
@@ -209,10 +233,53 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
       }
     }
 
-    this.controls.update();
+    if (this.cameraMode() === 'overview') this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
   };
+
+  /** Move the camera to follow the selected car. */
+private updateFollowCamera(dt: number): void {
+  const mode = this.cameraMode();
+  const code = this.selectedDriver();
+  if (mode === 'overview' || !code) return;
+
+  const car = this.cars.get(code);
+  if (!car || !this.onTrack.has(code)) return;
+
+  // Smooth the heading, always turning the short way around
+  const target = car.rotation.y;
+  if (!this.followInitialized) {
+    this.followHeading = target;
+  } else {
+    let diff = target - this.followHeading;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // wrap to [-π, π]
+    this.followHeading += diff * (1 - Math.exp(-6 * dt));
+  }
+
+  const forward = new THREE.Vector3(Math.cos(this.followHeading), 0, -Math.sin(this.followHeading));
+  const carPos = car.position;
+
+  let desired: THREE.Vector3;
+  let lookAt: THREE.Vector3;
+  if (mode === 'chase') {
+    desired = carPos.clone().addScaledVector(forward, -30).add(new THREE.Vector3(0, 12, 0));
+    lookAt = carPos.clone().addScaledVector(forward, 20);
+  } else {
+    // onboard: roughly at the driver's position, looking far down the track
+    desired = carPos.clone().addScaledVector(forward, 1).add(new THREE.Vector3(0, 2.5, 0));
+    lookAt = carPos.clone().addScaledVector(forward, 80).add(new THREE.Vector3(0, 1.5, 0));
+  }
+
+  if (!this.followInitialized) {
+    this.camera.position.copy(desired); // first frame: jump straight there
+    this.followInitialized = true;
+  } else {
+    const k = mode === 'chase' ? 5 : 20; // onboard follows tightly; chase trails a bit
+    this.camera.position.lerp(desired, 1 - Math.exp(-k * dt)); //frame rate independent smoothing
+  }
+  this.camera.lookAt(lookAt);
+}
 
   private resize(): void {
     const canvas = this.canvasRef.nativeElement;
@@ -408,11 +475,17 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
         car.visible = false;
         label.visible = false;
         this.carProgress.set(id, null);
+        this.onTrack.delete(id);
         continue;
       }
       this.carProgress.set(id, this.lapFraction(state.x, state.y));
-      car.visible = true;
-      label.visible = this.showLabels();
+      this.onTrack.add(id);
+
+      // Hide the followed car (and its label) in onboard view, since the camera sits inside it
+      const onboardSelf = this.cameraMode() === 'onboard' && id === this.selectedDriver();
+      car.visible = !onboardSelf;
+      label.visible = this.showLabels() && !onboardSelf;
+
       car.position.copy(this.toScene([state.x, state.y, state.z]));
       car.position.y += 1.5; // half the box height, so it sits on the road
       car.rotation.y = state.heading; // face the direction of travel

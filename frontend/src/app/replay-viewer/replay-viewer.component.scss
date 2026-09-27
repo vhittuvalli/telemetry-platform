@@ -54,6 +54,10 @@ button {
 
   &:hover { background: #444; }
   &.active { background: #e10600; }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+    }
 }
 
 .play {

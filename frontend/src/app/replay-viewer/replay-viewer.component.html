@@ -36,7 +36,11 @@
     </div>
 
     <button [class.active]="showLabels()" (click)="toggleLabels()">Labels</button>
-    <button (click)="resetView()">Reset view</button>
+    <div class="speeds">
+        <button [class.active]="cameraMode() === 'overview'" (click)="setCameraMode('overview')">Overview</button>
+        <button [class.active]="cameraMode() === 'chase'" [disabled]="!selectedDriver()" (click)="setCameraMode('chase')">Chase</button>
+        <button [class.active]="cameraMode() === 'onboard'" [disabled]="!selectedDriver()" (click)="setCameraMode('onboard')">Onboard</button>
+    </div>
   </div>
 } @else {
   <div class="loading">Loading race data…</div>
