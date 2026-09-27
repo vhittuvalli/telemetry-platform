@@ -12,6 +12,7 @@ import { PlaybackClock } from '../replay/playback-clock';
 import { VehicleTrack } from '../replay/vehicle-track';
 import { DriverLaps, computeStandings, indexLaps } from '../replay/standings';
 import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
+import { createCarModel } from '../replay/car-model';
 
 @Component({
   selector: 'app-replay-viewer',
@@ -41,7 +42,6 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private replayId = 'monza_2024_r';
   private clock?: PlaybackClock;
   private tracks = new Map<string, VehicleTrack>();
-  private cars = new Map<string, THREE.Mesh>();
   private labels = new Map<string, CSS2DObject>();
   private outline: [number, number][] = [];
   private carProgress = new Map<string, number | null>();
@@ -66,6 +66,9 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private followHeading = 0;
   private followInitialized = false;
   private onTrack = new Set<string>();
+
+  //cars
+  private cars = new Map<string, THREE.Object3D>();
 
   protected standings = computed(() => {
     const index = this.lapIndex();
@@ -263,12 +266,12 @@ private updateFollowCamera(dt: number): void {
   let desired: THREE.Vector3;
   let lookAt: THREE.Vector3;
   if (mode === 'chase') {
-    desired = carPos.clone().addScaledVector(forward, -30).add(new THREE.Vector3(0, 12, 0));
-    lookAt = carPos.clone().addScaledVector(forward, 20);
+    desired = carPos.clone().addScaledVector(forward, -12).add(new THREE.Vector3(0, 4, 0));
+    lookAt = carPos.clone().addScaledVector(forward, 10).add(new THREE.Vector3(0, 1, 0));
   } else {
-    // onboard: roughly at the driver's position, looking far down the track
-    desired = carPos.clone().addScaledVector(forward, 1).add(new THREE.Vector3(0, 2.5, 0));
-    lookAt = carPos.clone().addScaledVector(forward, 80).add(new THREE.Vector3(0, 1.5, 0));
+    // onboard: at the driver's head, looking down the track
+    desired = carPos.clone().addScaledVector(forward, 0.3).add(new THREE.Vector3(0, 1.1, 0));
+    lookAt = carPos.clone().addScaledVector(forward, 60).add(new THREE.Vector3(0, 0.8, 0));
   }
 
   if (!this.followInitialized) {
@@ -448,10 +451,7 @@ private updateFollowCamera(dt: number): void {
       if (!this.tracks.has(driver.code)) continue;
       const color = driver.color ?? '#ffffff';
 
-      const car = new THREE.Mesh(
-        new THREE.BoxGeometry(12, 3, 5), // enlarged for visibility
-        new THREE.MeshStandardMaterial({ color }),
-      );
+      const car = createCarModel(color);
       car.visible = false;
 
       const el = document.createElement('div');
@@ -459,7 +459,7 @@ private updateFollowCamera(dt: number): void {
       el.textContent = driver.code;
       el.style.borderLeftColor = color;
       const label = new CSS2DObject(el);
-      label.position.set(0, 8, 0); // a few meters above the car
+      label.position.set(0, 2.5, 0);; // a few meters above the car
       car.add(label);
 
       this.scene.add(car);
@@ -488,8 +488,13 @@ private updateFollowCamera(dt: number): void {
       label.visible = this.showLabels() && !onboardSelf;
 
       car.position.copy(this.toScene([state.x, state.y, state.z]));
-      car.position.y += 1.5; // half the box height, so it sits on the road
       car.rotation.y = state.heading; // face the direction of travel
+      if (this.cameraMode() === 'overview') {
+        const distance = this.camera.position.distanceTo(car.position);
+        car.scale.setScalar(THREE.MathUtils.clamp(distance / 250, 1, 6));
+      } else {
+        car.scale.setScalar(1);
+      }
     }
     this.separateCars();
   }
