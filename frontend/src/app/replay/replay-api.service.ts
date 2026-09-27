@@ -1,7 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { LapRecord, ReplayDataWindow, ReplayMeta } from './replay.models';
+import {
+  BuildJob, CatalogEvent, LapRecord, ReplayDataWindow, ReplayMeta, ReplaySummary,
+} from './replay.models';
 
 const API_URL = 'http://localhost:8000';
 //sets up the API service
@@ -10,6 +12,9 @@ const API_URL = 'http://localhost:8000';
 export class ReplayApiService {
   private http = inject(HttpClient);
 
+  listReplays(): Observable<ReplaySummary[]> {
+    return this.http.get<ReplaySummary[]>(`${API_URL}/replays`);
+  }
   getMeta(replayId: string): Observable<ReplayMeta> {
     return this.http.get<ReplayMeta>(`${API_URL}/replays/${replayId}/meta`);
   }
@@ -20,5 +25,19 @@ export class ReplayApiService {
   }
   getLaps(replayId: string): Observable<LapRecord[]> {
     return this.http.get<LapRecord[]>(`${API_URL}/replays/${replayId}/laps`);
+  }
+
+  // FastF1 catalog and replay builds
+  getSeasons(): Observable<number[]> {
+    return this.http.get<number[]>(`${API_URL}/catalog/seasons`);
+  }
+  getSeason(year: number): Observable<CatalogEvent[]> {
+    return this.http.get<CatalogEvent[]>(`${API_URL}/catalog/${year}`);
+  }
+  startBuild(year: number, round: number, session: string): Observable<BuildJob> {
+    return this.http.post<BuildJob>(`${API_URL}/builds`, { year, round, session });
+  }
+  getBuild(buildId: string): Observable<BuildJob> {
+    return this.http.get<BuildJob>(`${API_URL}/builds/${buildId}`);
   }
 }

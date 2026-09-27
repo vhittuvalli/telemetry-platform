@@ -57,3 +57,41 @@ export interface LapRecord {
   pit_in: number | null;
   pit_out: number | null;
 }
+export interface ReplaySummary {
+  id: string;
+  year: number;
+  event: string;
+  location: string;
+  session: string;
+  date: string | null;
+}
+
+export type SessionStatus = 'built' | 'building' | 'available' | 'upcoming';
+
+export interface CatalogSession {
+  code: string;
+  name: string;
+  date_utc: string | null;
+  status: SessionStatus;
+  replay_id: string;
+  build_id: string | null;
+}
+
+export interface CatalogEvent {
+  round: number;
+  name: string;
+  location: string;
+  country: string;
+  date: string;
+  sessions: CatalogSession[];
+}
+
+export interface BuildJob {
+  id: string;
+  replay_id: string;
+  year: number;
+  round: number;
+  session: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  message: string;
+}

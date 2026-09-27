@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from backend.routers import replays
-"""don't store replay endpoints here use a 
+from backend.routers import catalog, replays
+"""don't store replay endpoints here use a
 router so its easier to compile in main.py"""
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +9,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 app = FastAPI(title="Telemetry Platform API")
 app.include_router(replays.router)
+app.include_router(catalog.catalog_router)
+app.include_router(catalog.builds_router)
 app.add_middleware(GZipMiddleware, minimum_size=1000) #compress API responses
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"], #allow angular access
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"], #POST starts replay builds
     allow_headers=["*"],
 )
 

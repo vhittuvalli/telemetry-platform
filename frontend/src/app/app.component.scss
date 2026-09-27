@@ -1,0 +1,27 @@
+.race {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 520px); // stay clear of the leaderboard and dashboard
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 3;
+  padding: 8px 14px;
+  background: rgba(15, 15, 15, 0.85);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font: 600 14px system-ui, sans-serif;
+  cursor: pointer;
+
+  &:hover { background: rgba(40, 40, 40, 0.9); }
+}
+
+.year { color: #e10600; }
+.caret { margin-left: 6px; color: #999; }
+
+@media (max-width: 800px) {
+  .race { max-width: calc(100vw - 32px); top: auto; bottom: 90px; }
+}

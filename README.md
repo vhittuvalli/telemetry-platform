@@ -64,14 +64,23 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### Build a race replay
+### Build a replay
+
+The easiest way is from the viewer: click the session name at the top of the
+screen to open the race picker. It lists every season, event and session
+FastF1 has telemetry for (2018 onward). Click a session that isn't built yet
+and the backend downloads and processes it in the background (a few minutes;
+one build at a time). Built sessions show ▶ and open straight away.
+
+You can also build from the command line:
 
 ```bash
 python scripts/build_replay.py 2024 Monza R
 ```
 
-Arguments: `year`, `event`, and `session_type` (`R` race, `Q` qualifying,
-`S` sprint, `FP1`–`FP3` practice). Use quotes for names with spaces:
+Arguments: `year`, `event` (name or round number), and `session_type` (`R` race,
+`Q` qualifying, `S` sprint, `SQ`/`SS` sprint qualifying/shootout, `FP1`–`FP3`
+practice). Use quotes for names with spaces:
 
 ```bash
 python scripts/build_replay.py 2024 "Las Vegas" R
@@ -79,7 +88,8 @@ python scripts/build_replay.py 2024 "Las Vegas" R
 
 The first run downloads the session from FastF1 (this can take a few minutes);
 later runs use the local cache in `data/cache/`. The replay is saved to
-`data/replays/`, e.g. `monza_2024_r.parquet`.
+`data/replays/` as three files named after the official event name, e.g.
+`italian_grand_prix_2024_r.parquet`, `.meta.json` and `.laps.json`.
 
 ## Data format
 

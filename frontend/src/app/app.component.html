@@ -1,1 +1,21 @@
-<app-replay-viewer></app-replay-viewer>
+<app-replay-viewer [replayId]="replayId()" />
+
+<button class="race" (click)="openPicker()" title="Choose another session">
+  @if (current(); as r) {
+    <span class="year">{{ r.year }}</span> {{ r.event }} · {{ r.session }}
+  } @else {
+    Choose a session
+  }
+  <span class="caret">▾</span>
+</button>
+
+@if (pickerOpen()) {
+  <app-race-picker
+    [replays]="replays()"
+    [current]="replayId()"
+    [closable]="!!replayId()"
+    (select)="choose($event)"
+    (close)="pickerOpen.set(false)"
+    (built)="refreshReplays()"
+  />
+}

@@ -1,7 +1,8 @@
 # Replay Data Format
 
 **Version:** 0.1
-**Status:** Draft; applies to F1 race replays produced by `scripts/build_replay.py`
+**Status:** Draft; applies to F1 session replays produced by `telemetry.f1.build_and_save`
+(used by `scripts/build_replay.py` and the backend's `/builds` endpoint)
 
 This document defines the format of replay data used across the platform. The data
 pipeline (`telemetry/f1.py`) produces it, the backend serves it, and the 3D viewer
@@ -11,8 +12,13 @@ consumes it. Any new data source (uploads, the rocket simulator) must produce th
 
 - **Format:** Apache Parquet, Zstandard (`zstd`) compression
 - **Location:** `data/replays/`
-- **Naming:** `<event>_<year>_<session>.parquet`, lowercase, spaces replaced with
-  underscores (e.g. `monza_2024_r.parquet`)
+- **Naming:** `<event>_<year>_<session>.parquet`, where `<event>` is FastF1's
+  `EventName` lowercased with accents removed and non-alphanumerics replaced by
+  underscores (e.g. `italian_grand_prix_2024_r.parquet`). Older files named after
+  the location (e.g. `monza_2024_r`) still work; the backend identifies sessions
+  from each replay's `.meta.json`, not its filename.
+- **Companion files:** `<id>.meta.json` and `<id>.laps.json`. A replay counts as
+  built only when all three files exist (the laps file is written last).
 - **Layout:** long format: one row per vehicle per sample
 - **Sort order:** by `time`, then `vehicle_id`
 
