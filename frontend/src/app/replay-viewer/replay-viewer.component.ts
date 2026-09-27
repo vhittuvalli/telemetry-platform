@@ -13,7 +13,9 @@ import { VehicleTrack } from '../replay/vehicle-track';
 import { DriverLaps, computeStandings, indexLaps } from '../replay/standings';
 import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
 import { createCarModel } from '../replay/car-model';
-import { TrackLayout, buildEnvironment, buildRoad } from '../replay/track-builder';
+import { TrackLayout, buildEnvironment, buildRoad, setLamps } from '../replay/track-builder';
+import { buildPitLane, findPitLane } from '../replay/pit-lane';
+import { StartingGrid, buildStartingGrid, findStartingGrid, lightsOn } from '../replay/starting-grid';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { VehicleState } from '../replay/vehicle-track';
 
@@ -54,6 +56,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private viewReady = signal(false);
   private loading = new Subscription();
   private trackObjects: THREE.Object3D[] = []; // road and scenery for the current track
+  private layout?: TrackLayout;
+  private grid: StartingGrid | null = null;
+  private startLamps: THREE.Mesh[] = [];
+  private litLamps = -1;
   private clock?: PlaybackClock;
   private tracks = new Map<string, VehicleTrack>();
   private labels = new Map<string, CSS2DObject>();
@@ -193,6 +199,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.onTrack.clear();
     this.outline = [];
     this.trackBounds = undefined;
+    this.layout = undefined;
+    this.grid = null;
+    this.startLamps = [];
+    this.litLamps = -1;
     this.clock = undefined;
 
     this.currentTime.set(0);
@@ -293,6 +303,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     if (this.clock) {
       this.clock.tick(dt);
       this.updateCars(this.clock.time);
+      this.updateStartLights(this.clock.time);
       this.updateFollowCamera(dt);
 
       const now = performance.now();
@@ -379,10 +390,10 @@ private updateFollowCamera(dt: number): void {
 
     const points = meta.track_outline.map((p) => this.toScene(p));
 
-    // Road and surroundings, built from the smoothed track layout
+    // Road now; the scenery waits for the telemetry, which shows where the pits and grid are
     const layout = new TrackLayout(points);
-    this.trackObjects = [buildRoad(layout), buildEnvironment(layout)];
-    this.scene.add(...this.trackObjects);
+    this.layout = layout;
+    this.addTrackObject(buildRoad(layout));
 
     // Frame the camera on the track
     this.trackBounds = new THREE.Box3().setFromPoints(points);
@@ -442,13 +453,6 @@ private updateFollowCamera(dt: number): void {
 
     // Leaderboard data
     this.drivers.set(meta.drivers);
-    this.loading.add(this.api.getLaps(id).subscribe({
-      next: (laps) => {
-        this.lapIndex.set(indexLaps(laps));
-        this.totalLaps.set(Math.max(0, ...laps.map((l) => l.lap)));
-      },
-      error: (err) => this.fail('Failed to load laps', err),
-    }));
 
     // Telemetry, in chunks
     const chunk = 300; // matches the backend's max window
@@ -457,8 +461,13 @@ private updateFollowCamera(dt: number): void {
       requests.push(this.api.getData(id, s, Math.min(s + chunk, end + 1)));
     }
 
-    this.loading.add(forkJoin(requests).subscribe({
-      next: (windows) => {
+    // Laps come with the telemetry: together they show where the pit lane and grid are
+    this.loading.add(forkJoin({ laps: this.api.getLaps(id), windows: forkJoin(requests) }).subscribe({
+      next: ({ laps, windows }) => {
+        const lapIndex = indexLaps(laps);
+        this.lapIndex.set(lapIndex);
+        this.totalLaps.set(Math.max(0, ...laps.map((l) => l.lap)));
+
         for (const w of windows) {
           for (const [id, series] of Object.entries(w.vehicles)) {
             const existing = this.tracks.get(id);
@@ -467,15 +476,53 @@ private updateFollowCamera(dt: number): void {
           }
         }
         for (const track of this.tracks.values()) track.finalize();
+        this.buildScenery(meta, lapIndex);
         this.createCars(meta);
         this.clock = new PlaybackClock(start, end);
-        this.clock.seek(0);
+        // Races open on the formed grid a few seconds before the lights; other sessions at the start
+        this.clock.seek(this.grid ? Math.max(start, this.grid.raceStart - 10) : 0);
         this.clock.playing = true;
         this.timeRange.set({ start, end });
         this.playing.set(true);
       },
       error: (err) => this.fail('Failed to load replay data', err),
     }));
+  }
+
+  private addTrackObject(obj: THREE.Object3D): void {
+    this.trackObjects.push(obj);
+    this.scene.add(obj);
+  }
+
+  /** Pit lane, starting grid, and the rest of the scenery around the track. */
+  private buildScenery(meta: ReplayMeta, lapIndex: Map<string, DriverLaps>): void {
+    const layout = this.layout!;
+    const toScene = (p: [number, number, number]) => this.toScene(p);
+
+    const pitLane = findPitLane(layout, this.tracks, lapIndex, toScene);
+    if (pitLane) {
+      const teamColors = [...new Set(meta.drivers.map((d) => d.color ?? '#888888'))];
+      this.addTrackObject(buildPitLane(layout, pitLane, teamColors));
+    }
+
+    // Only races and sprints start from a grid
+    const standingStart = meta.session.name === 'Race' || meta.session.name === 'Sprint';
+    this.grid = standingStart ? findStartingGrid(layout, this.tracks, lapIndex, toScene) : null;
+    if (this.grid) {
+      const { group, lamps } = buildStartingGrid(layout, this.grid);
+      this.addTrackObject(group);
+      this.startLamps = lamps;
+    }
+
+    this.addTrackObject(buildEnvironment(layout, { pitSide: pitLane?.side, finishGantry: !this.grid }));
+  }
+
+  private updateStartLights(t: number): void {
+    if (!this.grid) return;
+    const lit = lightsOn(this.grid, t);
+    if (lit === this.litLamps) return;
+    this.litLamps = lit;
+    setLamps(this.startLamps, lit);
   }
 
   private createCars(meta: ReplayMeta): void {
@@ -521,7 +568,10 @@ private updateFollowCamera(dt: number): void {
       car.visible = !onboardSelf;
       label.visible = this.showLabels() && !onboardSelf;
 
-      car.position.copy(this.toScene([state.x, state.y, state.z]));
+      // Sit on the road surface: telemetry heights are noisy, and flat in the pit lane
+      const position = this.toScene([state.x, state.y, state.z]);
+      if (this.layout) position.y = this.layout.samples[this.layout.locate(position).index].y;
+      car.position.copy(position);
       car.rotation.y = state.heading; // face the direction of travel
       if (this.cameraMode() === 'overview') {
         const distance = this.camera.position.distanceTo(car.position);

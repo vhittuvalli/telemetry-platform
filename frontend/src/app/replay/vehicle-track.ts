@@ -50,7 +50,7 @@ export class VehicleTrack {
   private sx: number[] = [];
   private sy: number[] = [];
   private sz: number[] = [];
-  private lastHeading = 0;
+  private headings: number[] = []; // per sample, carried through stops
 
   constructor(public readonly id: string, public readonly data: VehicleSeries) {}
 
@@ -61,11 +61,41 @@ export class VehicleTrack {
     }
   }
 
-  /** Call once after all chunks are loaded: precompute smoothed positions. */
+  /** Call once after all chunks are loaded: drop bad samples, precompute smoothed positions. */
   finalize(radius = 2): void {
+    this.dropMissingPositions();
     this.sx = smooth(this.data.x, radius);
     this.sy = smooth(this.data.y, radius);
     this.sz = smooth(this.data.z, radius);
+    this.headings = this.computeHeadings();
+  }
+
+  /** FastF1 reports (0, 0, 0) while a car has no position fix (e.g. before it leaves the garage). */
+  private dropMissingPositions(): void {
+    const d = this.data;
+    const keep = d.time.map((_, i) => !(d.x[i] === 0 && d.y[i] === 0));
+    if (keep.every(Boolean)) return;
+    for (const key of Object.keys(d) as (keyof VehicleSeries)[]) {
+      (d[key] as unknown[]) = (d[key] as unknown[]).filter((_, i) => keep[i]);
+    }
+  }
+
+  /** Direction of travel at each sample; a stopped car keeps the heading it arrived with. */
+  private computeHeadings(): number[] {
+    const n = this.sx.length;
+    const out = new Array<number>(n).fill(NaN);
+    let last = NaN;
+    for (let i = 0; i < n; i++) {
+      const a = Math.max(i - 1, 0);
+      const b = Math.min(i + 1, n - 1);
+      const dx = this.sx[b] - this.sx[a];
+      const dy = this.sy[b] - this.sy[a];
+      if (dx * dx + dy * dy > 0.01) last = Math.atan2(dy, dx);
+      out[i] = last;
+    }
+    // Before the car first moves, use the first heading it has
+    const first = out.find((h) => !Number.isNaN(h)) ?? 0;
+    return out.map((h) => (Number.isNaN(h) ? first : h));
   }
 
   /** Interpolated state at time t, or null if there is no data at t. */
@@ -93,17 +123,17 @@ export class VehicleTrack {
     const [y0, y1, y2, y3] = at(this.sy);
     const [z0, z1, z2, z3] = at(this.sz);
 
-    // Heading from the curve's direction; keep the last heading if the car is stopped
+    // Heading from the curve's direction, or the precomputed one if the car is stopped
     const dx = catmullSlope(x0, x1, x2, x3, f);
     const dy = catmullSlope(y0, y1, y2, y3, f);
-    if (dx * dx + dy * dy > 1e-4) this.lastHeading = Math.atan2(dy, dx);
+    const heading = dx * dx + dy * dy > 1e-4 ? Math.atan2(dy, dx) : this.headings[i];
 
     const d = this.data;
     return {
       x: catmull(x0, x1, x2, x3, f),
       y: catmull(y0, y1, y2, y3, f),
       z: catmull(z0, z1, z2, z3, f),
-      heading: this.lastHeading,
+      heading,
       // Continuous channels: blend between samples for smooth readouts
       speed: lerpNullable(d.speed[i], d.speed[i + 1], f),
       throttle: lerpNullable(d.throttle[i], d.throttle[i + 1], f),

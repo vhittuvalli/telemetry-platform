@@ -92,6 +92,8 @@ def build_race_replay(session, padding_s=60):
         frames.append(to_standard_format(tel, driver))
 
     replay = pd.concat(frames, ignore_index=True)
+    #FastF1 reports (0, 0, 0) while a car has no position fix (e.g. before it leaves the garage)
+    replay = replay[~((replay["x"] == 0) & (replay["y"] == 0))]
 
     start = session_start_seconds(session)
     end = session.laps["Time"].max().total_seconds()
