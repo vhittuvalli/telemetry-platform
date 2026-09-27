@@ -72,8 +72,27 @@ export class TrackLayout {
     return this.samples[i].clone().addScaledVector(this.sides[i], offset * s);
   }
 
+  /**
+   * The track sample nearest to p and p's signed distance across the track from it
+   * (+ right, - left). Height counts too, so on crossovers the right level wins.
+   */
+  locate(p: THREE.Vector3): { index: number; lateral: number } {
+    let index = 0;
+    let best = Infinity;
+    for (let i = 0; i < this.length; i++) {
+      const q = this.samples[i];
+      const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2 + (q.z - p.z) ** 2;
+      if (d < best) {
+        best = d;
+        index = i;
+      }
+    }
+    const offset = p.clone().sub(this.samples[index]);
+    return { index, lateral: offset.x * this.sides[index].x + offset.z * this.sides[index].z };
+  }
+
   /** Distance between two sample indices, going around the loop the short way. */
-  private gap(i: number, j: number): number {
+  gap(i: number, j: number): number {
     const d = Math.abs(i - j) % this.length;
     return Math.min(d, this.length - d);
   }
@@ -186,7 +205,7 @@ function buildStrip(
   return geometry;
 }
 
-const stripMaterial = new THREE.MeshStandardMaterial({
+export const stripMaterial = new THREE.MeshStandardMaterial({
   vertexColors: true,
   side: THREE.DoubleSide,
   roughness: 0.9,
@@ -223,12 +242,17 @@ export function buildRoad(layout: TrackLayout): THREE.Group {
 // Environment
 // ---------------------------------------------------------------------------
 
-export function buildEnvironment(layout: TrackLayout): THREE.Group {
+export interface EnvironmentOptions {
+  pitSide?: number;      // side of the pit lane when known from data (+1 right, -1 left)
+  finishGantry?: boolean; // start lights over the finish line (off when a grid has its own)
+}
+
+export function buildEnvironment(layout: TrackLayout, options: EnvironmentOptions = {}): THREE.Group {
   const env = new THREE.Group();
   env.add(buildVergeAndRunoff(layout));
   env.add(buildEmbankments(layout));
-  env.add(buildStartLine(layout));
-  env.add(buildGrandstandsAndPits(layout));
+  env.add(buildStartLine(layout, options.finishGantry ?? true));
+  env.add(buildGrandstandsAndPits(layout, options.pitSide));
   env.add(buildBarriers(layout));
   env.add(buildTrees(layout));
   return env;
@@ -337,7 +361,7 @@ function checkerTexture(cols: number, rows: number): THREE.CanvasTexture {
   return texture;
 }
 
-function buildStartLine(layout: TrackLayout): THREE.Group {
+function buildStartLine(layout: TrackLayout, withGantry: boolean): THREE.Group {
   const group = new THREE.Group();
   const w = layout.width;
 
@@ -349,8 +373,20 @@ function buildStartLine(layout: TrackLayout): THREE.Group {
   line.rotation.x = -Math.PI / 2;
   line.position.y = 0.05;
   group.add(line);
+  if (withGantry) group.add(buildGantry(w).group);
 
-  // Start-light gantry
+  group.position.copy(layout.samples[0]);
+  group.rotation.y = layout.heading(0);
+  return group;
+}
+
+/**
+ * Start-light gantry spanning a track `width` wide, centered on the local origin
+ * (local X = along the track). Returns the five lamps so they can be switched on and off.
+ */
+export function buildGantry(width: number, lit = true): { group: THREE.Group; lamps: THREE.Mesh[] } {
+  const group = new THREE.Group();
+  const w = width;
   const steel = new THREE.MeshStandardMaterial({ color: 0x444444 });
   for (const z of [-(w / 2 + 1.5), w / 2 + 1.5]) {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 7, 0.4), steel);
@@ -361,16 +397,26 @@ function buildStartLine(layout: TrackLayout): THREE.Group {
   beam.position.set(0, 7, 0);
   group.add(beam);
 
-  const light = new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xaa0000 });
+  const lamps: THREE.Mesh[] = [];
   for (let k = 0; k < 5; k++) {
+    // One material per lamp so each can be lit on its own
+    const light = new THREE.MeshStandardMaterial({ color: 0x331111, emissive: 0xaa0000 });
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), light);
     lamp.position.set(-0.35, 6.5, (k - 2) * 1.2);
     group.add(lamp);
+    lamps.push(lamp);
   }
+  setLamps(lamps, lit ? 5 : 0);
+  return { group, lamps };
+}
 
-  group.position.copy(layout.samples[0]);
-  group.rotation.y = layout.heading(0);
-  return group;
+/** Light the first `count` lamps and turn the rest off. */
+export function setLamps(lamps: THREE.Mesh[], count: number): void {
+  lamps.forEach((lamp, k) => {
+    const material = lamp.material as THREE.MeshStandardMaterial;
+    material.color.setHex(k < count ? 0xff2222 : 0x331111);
+    material.emissiveIntensity = k < count ? 1 : 0;
+  });
 }
 
 function buildGrandstand(colorIndex: number): THREE.Group {
@@ -401,7 +447,7 @@ function buildGrandstand(colorIndex: number): THREE.Group {
   return stand;
 }
 
-function buildGrandstandsAndPits(layout: TrackLayout): THREE.Group {
+function buildGrandstandsAndPits(layout: TrackLayout, pitSide?: number): THREE.Group {
   const group = new THREE.Group();
   const half = layout.half;
   const straight = layout.findMainStraight();
@@ -416,7 +462,8 @@ function buildGrandstandsAndPits(layout: TrackLayout): THREE.Group {
   const standOffset = half + 22;
   const fits = (i: number, s: number) => layout.isClear(layout.offsetPoint(i, standOffset + 9, s), i, 30);
   const fitCount = (s: number) => spots.filter((i) => fits(i, s)).length;
-  const standSide = fitCount(1) >= fitCount(-1) ? 1 : -1;
+  // Stands go opposite the pit lane when we know where it is
+  const standSide = pitSide ? -pitSide : fitCount(1) >= fitCount(-1) ? 1 : -1;
 
   spots.forEach((i, k) => {
     if (!fits(i, standSide)) return;
@@ -427,11 +474,11 @@ function buildGrandstandsAndPits(layout: TrackLayout): THREE.Group {
     group.add(stand);
   });
 
-  // Pit building on the other side, sized to the straight
-  const pitSide = -standSide;
+  // No pit lane in the data: put a pit building opposite the stands, sized to the straight
+  if (pitSide) return group;
   const mid = usable[Math.floor(usable.length / 2)];
   const pitLength = Math.min(180, usable.length * layout.spacing - 10);
-  const pitCenter = layout.offsetPoint(mid, half + 30, pitSide);
+  const pitCenter = layout.offsetPoint(mid, half + 30, -standSide);
   if (pitLength > 40 && layout.isClear(pitCenter, mid, 30)) {
     const pits = new THREE.Mesh(
       new THREE.BoxGeometry(pitLength, 8, 14),

@@ -69,6 +69,10 @@ Optional columns power the dashboard, charts, and metrics.
   nearest car-data sample within **500 ms**. Rows with no match within that window
   have missing (null) car-data values.
 - A vehicle's rows stop when it retires or its data ends.
+- Samples without a position fix (FastF1 reports them as `x = y = 0`, typically before a
+  car first leaves the garage) are dropped, so a vehicle's rows may start after `time` 0.
+- `z` in the pit lane is often held flat by FastF1 and can sit a few meters off the
+  track's real height; renderers should place cars on their own road surface.
 
 ## Interpolation guidance (for consumers)
 
