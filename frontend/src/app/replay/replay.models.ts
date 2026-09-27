@@ -33,6 +33,8 @@ export interface VehicleSeries {
   throttle: (number | null)[];
   brake: (number | null)[];
   gear: (number | null)[];
+  rpm: (number | null)[];
+  drs: (number | null)[];
   on_track: boolean[];
 }
 

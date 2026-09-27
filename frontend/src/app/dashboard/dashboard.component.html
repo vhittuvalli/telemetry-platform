@@ -1,0 +1,36 @@
+<div class="dash">
+  @if (row(); as r) {
+    <div class="driver">
+      <span class="pos">P{{ r.position }}</span>
+      <span class="code" [style.border-left-color]="r.color">{{ r.code }}</span>
+      @if (r.compound) {
+        <span class="tyre" [attr.data-compound]="r.compound">{{ r.compound[0] }}</span>
+      }
+    </div>
+  }
+
+  <div class="main">
+    <div class="speed">
+      <span class="value">{{ speed() }}</span>
+      <span class="unit">km/h</span>
+    </div>
+    <div class="gear">{{ gear() }}</div>
+  </div>
+
+  <div class="rpm">
+    <div class="fill" [style.width.%]="rpmPct()"></div>
+  </div>
+
+  <div class="pedals">
+    <div class="pedal">
+      <span>THR</span>
+      <div class="bar"><div class="fill throttle" [style.width.%]="throttlePct()"></div></div>
+    </div>
+    <div class="pedal">
+      <span>BRK</span>
+      <div class="bar"><div class="fill brake" [style.width.%]="braking() ? 100 : 0"></div></div>
+    </div>
+  </div>
+
+  <div class="drs" [class.open]="drsOpen()">DRS</div>
+</div>

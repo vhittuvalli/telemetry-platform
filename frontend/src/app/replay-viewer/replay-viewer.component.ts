@@ -14,11 +14,13 @@ import { DriverLaps, computeStandings, indexLaps } from '../replay/standings';
 import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
 import { createCarModel } from '../replay/car-model';
 import { TrackLayout, buildEnvironment, buildRoad } from '../replay/track-builder';
+import { DashboardComponent } from '../dashboard/dashboard.component';
+import { VehicleState } from '../replay/vehicle-track';
 
 @Component({
   selector: 'app-replay-viewer',
   standalone: true,
-  imports: [LeaderboardComponent],
+  imports: [LeaderboardComponent, DashboardComponent],
   templateUrl: './replay-viewer.component.html',
   styleUrl: './replay-viewer.component.scss',
 })
@@ -37,6 +39,14 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private frameTimer = new THREE.Clock();
   private resizeObserver?: ResizeObserver;
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  private carStates = new Map<string, VehicleState>();
+  protected selectedState = signal<VehicleState | null>(null);
+
+  protected selectedRow = computed(() => {
+    const code = this.selectedDriver();
+    return this.standings().find((r) => r.code === code) ?? null;
+  });
 
   // replay data
   private api = inject(ReplayApiService);
@@ -233,6 +243,8 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
         this.zone.run(() => {
           this.currentTime.set(clock.time);
           this.playing.set(clock.playing);
+          const code = this.selectedDriver();
+          this.selectedState.set(code ? this.carStates.get(code) ?? null : null);
         });
       }
     }
@@ -438,10 +450,12 @@ private updateFollowCamera(dt: number): void {
         label.visible = false;
         this.carProgress.set(id, null);
         this.onTrack.delete(id);
+        this.carStates.delete(id);
         continue;
       }
       this.carProgress.set(id, this.lapFraction(state.x, state.y));
       this.onTrack.add(id);
+      this.carStates.set(id, state);
 
       // Hide the followed car (and its label) in onboard view, since the camera sits inside it
       const onboardSelf = this.cameraMode() === 'onboard' && id === this.selectedDriver();

@@ -9,6 +9,9 @@
       (select)="selectDriver($event)"
     />
   }
+  @if (selectedState(); as state) {
+    <app-dashboard [state]="state" [row]="selectedRow()" />
+  }
 
   <div class="controls">
     <button class="play" (click)="togglePlay()">

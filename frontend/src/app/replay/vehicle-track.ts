@@ -4,7 +4,11 @@ export interface VehicleState {
   x: number; y: number; z: number;
   heading: number;        // radians, direction of travel in the data's x/y plane
   speed: number | null;
+  throttle: number | null;
+  brake: number | null;
   gear: number | null;
+  rpm: number | null;
+  drs: number | null;
   onTrack: boolean;
 }
 
@@ -32,6 +36,13 @@ function catmull(p0: number, p1: number, p2: number, p3: number, f: number): num
 /** Rate of change of the Catmull-Rom curve at fraction f (its direction). */
 function catmullSlope(p0: number, p1: number, p2: number, p3: number, f: number): number {
   return 0.5 * ((-p0 + p2) + 2 * (2 * p0 - 5 * p1 + 4 * p2 - p3) * f + 3 * (-p0 + 3 * p1 - 3 * p2 + p3) * f * f);
+}
+
+/** Linear blend that tolerates missing values (uses whichever side exists). */
+function lerpNullable(a: number | null, b: number | null, f: number): number | null {
+  if (a == null) return b;
+  if (b == null) return a;
+  return a + (b - a) * f;
 }
 
 export class VehicleTrack {
@@ -93,8 +104,14 @@ export class VehicleTrack {
       y: catmull(y0, y1, y2, y3, f),
       z: catmull(z0, z1, z2, z3, f),
       heading: this.lastHeading,
-      speed: d.speed[i],
+      // Continuous channels: blend between samples for smooth readouts
+      speed: lerpNullable(d.speed[i], d.speed[i + 1], f),
+      throttle: lerpNullable(d.throttle[i], d.throttle[i + 1], f),
+      rpm: lerpNullable(d.rpm[i], d.rpm[i + 1], f),
+      // Stepped channels: use the most recent value
+      brake: d.brake[i],
       gear: d.gear[i],
+      drs: d.drs[i],
       onTrack: d.on_track[i],
     };
   }
