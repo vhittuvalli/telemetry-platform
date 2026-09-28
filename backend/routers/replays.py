@@ -3,6 +3,7 @@ import os
 import threading
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
+from backend import simulations
 from telemetry.f1 import REPLAYS_DIR, load_replay
 import json
 
@@ -20,19 +21,23 @@ _data_slots = threading.BoundedSemaphore(DATA_CONCURRENCY)
 
 
 @lru_cache(maxsize=REPLAY_CACHE_SIZE)
-def _load(replay_id: str) -> pd.DataFrame:
-    path = REPLAYS_DIR / f"{replay_id}.parquet"
-    #check if replay exists
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Replay '{replay_id}' not found")
+def _load(path, mtime: float) -> pd.DataFrame:
     return load_replay(path)
 
 
 def get_replay(replay_id: str) -> pd.DataFrame:
     """Load a replay once and keep it in memory. (utilize LRU cache)"""
+    simulated = simulations.get(replay_id)
+    if simulated:
+        return simulated["frame"]
+    path = REPLAYS_DIR / f"{replay_id}.parquet"
+    #check if replay exists
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Replay '{replay_id}' not found")
+    #keyed on the file's modification time, so a rebuilt replay is picked up
     #lru_cache doesn't stop parallel misses from each loading the same file
     with _load_lock:
-        return _load(replay_id)
+        return _load(path, path.stat().st_mtime)
 
 
 def column_to_list(series: pd.Series) -> list:
@@ -40,18 +45,21 @@ def column_to_list(series: pd.Series) -> list:
     return series.astype(object).where(series.notna(), None).tolist()
 
 def built_replays() -> list[dict]:
-    """Every fully built replay (all three files present), newest session first."""
+    """Every fully built replay, newest session first."""
     summaries = []
     for meta_path in REPLAYS_DIR.glob("*.meta.json"):
         replay_id = meta_path.name.removesuffix(".meta.json")
-        #the laps file is written last, so its presence means the build finished
         if not (REPLAYS_DIR / f"{replay_id}.parquet").exists():
             continue
-        if not (REPLAYS_DIR / f"{replay_id}.laps.json").exists():
+        meta = read_json(replay_id, ".meta.json")
+        domain = meta.get("domain", "f1") #replays built before domains existed are F1
+        #F1 builds write the laps file last, so its presence means the build finished
+        if domain == "f1" and not (REPLAYS_DIR / f"{replay_id}.laps.json").exists():
             continue
-        session = read_json(replay_id, ".meta.json")["session"]
+        session = meta["session"]
         summaries.append({
             "id": replay_id,
+            "domain": domain,
             "year": session["year"],
             "event": session["event"],
             "location": session["location"],
@@ -101,10 +109,21 @@ def replay_file(replay_id: str, suffix: str):
     return path
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=32)
+def _read_json(path, mtime: float):
+    return json.loads(path.read_text())
+
+
 def read_json(replay_id: str, suffix: str):
-    """Load a replay's JSON file once and keep it in memory."""
-    return json.loads(replay_file(replay_id, suffix).read_text())
+    """Load a replay's JSON file once and keep it in memory (until the file changes)."""
+    simulated = simulations.get(replay_id)
+    if simulated:
+        value = {".meta.json": simulated["meta"], ".dispersion.json": simulated["dispersion"]}.get(suffix)
+        if value is None:
+            raise HTTPException(status_code=404, detail=f"No {suffix} for flight '{replay_id}'")
+        return value
+    path = replay_file(replay_id, suffix)
+    return _read_json(path, path.stat().st_mtime)
 
 
 @router.get("/{replay_id}/meta")
@@ -120,3 +139,8 @@ def get_replay_laps(replay_id: str, driver: str | None = None):
     if driver is not None:
         laps = [lap for lap in laps if lap["driver"] == driver]
     return laps
+
+@router.get("/{replay_id}/dispersion")
+def get_replay_dispersion(replay_id: str):
+    """Monte Carlo results for a rocket flight: every run's landing point and apogee, and their spread."""
+    return read_json(replay_id, ".dispersion.json")

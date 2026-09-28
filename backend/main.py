@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from backend.routers import catalog, replays
+from backend.routers import catalog, replays, rockets
 """don't store replay endpoints here use a
 router so its easier to compile in main.py"""
 
@@ -20,6 +20,7 @@ app = FastAPI(title="Telemetry Platform API")
 app.include_router(replays.router)
 app.include_router(catalog.catalog_router)
 app.include_router(catalog.builds_router)
+app.include_router(rockets.router)
 app.add_middleware(GZipMiddleware, minimum_size=1000) #compress API responses
 
 app.add_middleware(

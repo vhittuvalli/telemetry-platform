@@ -1,0 +1,53 @@
+<h3>Monte Carlo · {{ dispersion().succeeded }} runs</h3>
+
+<div class="stats">
+  <div>
+    <span class="label">Apogee</span>
+    <span class="value">{{ round(dispersion().apogee.mean) }} <span class="unit">± {{ round(dispersion().apogee.sd) }} m</span></span>
+  </div>
+  <div>
+    <span class="label">95% landing zone</span>
+    <span class="value">{{ round(2 * zone95().semi_major) }} × {{ round(2 * zone95().semi_minor) }} <span class="unit">m</span></span>
+  </div>
+</div>
+
+<div class="chart">
+  <div class="caption" aria-live="polite">
+    @if (active(); as b) {
+      <strong>{{ b.count }} runs</strong> reached {{ round(b.lo) }}–{{ round(b.hi) }} m
+    } @else {
+      Apogee across runs · 5–95%: {{ round(dispersion().apogee.p5) }}–{{ round(dispersion().apogee.p95) }} m
+    }
+  </div>
+  <svg [attr.viewBox]="'0 0 ' + width + ' ' + height" role="img" aria-label="Histogram of apogee across Monte Carlo runs">
+    <line class="baseline" x1="0" [attr.x2]="width" [attr.y1]="height" [attr.y2]="height" />
+    @for (b of bins(); track b.lo) {
+      <g
+        class="bin"
+        [class.active]="active() === b"
+        tabindex="0"
+        (pointerenter)="active.set(b)"
+        (pointerleave)="active.set(null)"
+        (focus)="active.set(b)"
+        (blur)="active.set(null)"
+      >
+        <rect class="hit" [attr.x]="b.x - 1" y="0" [attr.width]="b.width + 2" [attr.height]="height" />
+        @if (b.count) {
+          <path class="bar" [attr.d]="barPath(b)" />
+        }
+      </g>
+    }
+    <line class="nominal" [attr.x1]="nominalX()" [attr.x2]="nominalX()" y1="0" [attr.y2]="height" />
+    <text class="nominal-label" [attr.x]="nominalX() + 4" y="9">nominal</text>
+  </svg>
+  <div class="axis">
+    <span>{{ round(bins()[0].lo) }} m</span>
+    <span>{{ round(bins()[bins().length - 1].hi) }} m</span>
+  </div>
+</div>
+
+<p class="note">
+  Wind, thrust, rail angle, drag, mass and parachute performance varied around this flight.
+  {{ (zone95().observed * 100).toFixed(0) }}% of runs landed inside the 95% zone; the farthest was
+  {{ round(dispersion().landing.max_distance) }} m from the pad.
+</p>

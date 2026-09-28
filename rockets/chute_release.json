@@ -1,0 +1,161 @@
+{
+  "name": "Chute release",
+  "body_tubes": [
+    {
+      "length": 0.3937,
+      "diameter": 0.0635,
+      "position": 0.24765
+    },
+    {
+      "length": 0.3937,
+      "diameter": 0.0635,
+      "position": 0.64135
+    }
+  ],
+  "fins": [
+    {
+      "count": 3,
+      "root_chord": 0.13419328,
+      "tip_chord": 0.13419328,
+      "span": 0.07924799999999999,
+      "sweep": 0.06709664,
+      "thickness": 0.004762499999999999,
+      "position": 0.9008567199999999,
+      "cross_section": "rounded"
+    }
+  ],
+  "masses": [
+    {
+      "name": "Nose cone",
+      "mass": 0.496115,
+      "cg": 0.18237,
+      "length": 0.24765,
+      "radius": 0.03175
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.059839,
+      "cg": 0.4445,
+      "length": 0.3937,
+      "radius": 0.03175
+    },
+    {
+      "name": "Shock cord",
+      "mass": 0.004536,
+      "cg": 0.3683,
+      "length": 0.1143,
+      "radius": 0.0
+    },
+    {
+      "name": "Reefed Parachute",
+      "mass": 0.006635,
+      "cg": 0.26015,
+      "length": 0.025,
+      "radius": 0.0
+    },
+    {
+      "name": "Opened Elliptical Parachute [Cd 1.55 (3.1 oz) 15.9 in^3]",
+      "mass": 0.087884,
+      "cg": 0.469,
+      "length": 0.08709,
+      "radius": 0.0
+    },
+    {
+      "name": "Wadding",
+      "mass": 0.036866,
+      "cg": 0.54134,
+      "length": 0.05397,
+      "radius": 0.0
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.059839,
+      "cg": 0.8382,
+      "length": 0.3937,
+      "radius": 0.03175
+    },
+    {
+      "name": "Tube Coupler",
+      "mass": 0.013217,
+      "cg": 0.64135,
+      "length": 0.0762,
+      "radius": 0.03089
+    },
+    {
+      "name": "Rail Button",
+      "mass": 0.002865,
+      "cg": 0.84455,
+      "length": 0.0,
+      "radius": 0.0
+    },
+    {
+      "name": "Trapezoidal fin set",
+      "mass": 0.113794,
+      "cg": 0.99552,
+      "length": 0.13419,
+      "radius": 0.0
+    },
+    {
+      "name": "Centering ring",
+      "mass": 0.007225,
+      "cg": 0.9034,
+      "length": 0.00508,
+      "radius": 0.03089
+    },
+    {
+      "name": "Centering ring",
+      "mass": 0.007225,
+      "cg": 1.02807,
+      "length": 0.00508,
+      "radius": 0.03089
+    },
+    {
+      "name": "Inner Tube",
+      "mass": 0.014703,
+      "cg": 0.93345,
+      "length": 0.2032,
+      "radius": 0.01534
+    }
+  ],
+  "launch_lugs": [],
+  "recovery": [
+    {
+      "name": "Reefed Parachute",
+      "diameter": 0.254,
+      "cd": 1.55,
+      "deploy": "ejection",
+      "deploy_altitude": null,
+      "deploy_delay": 0.0
+    },
+    {
+      "name": "Opened Elliptical Parachute [Cd 1.55 (3.1 oz) 15.9 in^3]",
+      "diameter": 0.7111999999999998,
+      "cd": 1.55,
+      "deploy": "altitude",
+      "deploy_altitude": 152.4,
+      "deploy_delay": 0.0
+    }
+  ],
+  "nose": {
+    "shape": "ogive",
+    "length": 0.24764999999999998,
+    "diameter": 0.0635,
+    "shape_parameter": 1.0,
+    "position": 0.0
+  },
+  "motor": {
+    "file": "motors/aerotech_g40w.eng",
+    "aft_position": 1.04458,
+    "ejection_delay": 7.0
+  },
+  "launch": {
+    "rail_length": 3.048,
+    "angle": 0.0,
+    "heading": 90.0,
+    "wind_speed": 2.0,
+    "wind_from": 90.0,
+    "site_altitude": 0.0,
+    "temperature": 288.15,
+    "pressure": 101325.0
+  }
+}

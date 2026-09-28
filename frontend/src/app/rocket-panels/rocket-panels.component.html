@@ -1,0 +1,93 @@
+<section class="panel flight" aria-label="Flight">
+  <header>
+    <div class="name">{{ meta().rocket.name }}</div>
+    <div class="motor">{{ meta().rocket.motor.manufacturer }} {{ meta().rocket.motor.designation }}</div>
+  </header>
+
+  <div class="row">
+    <div class="phase">{{ scene().phase() }}</div>
+    <button class="relaunch" (click)="relaunch.emit()">Change launch…</button>
+  </div>
+
+  @if (state(); as s) {
+    <div class="hero">
+      <span class="value">{{ s.z | number: '1.0-0' }}</span>
+      <span class="unit">m altitude</span>
+    </div>
+    <div class="tiles">
+      @for (tile of tiles(); track tile.label) {
+        <div class="tile">
+          <span class="label">{{ tile.label }}</span>
+          <span class="value">{{ tile.value }} <span class="unit">{{ tile.unit }}</span></span>
+        </div>
+      }
+    </div>
+  }
+
+  <h3>Events</h3>
+  <ol class="events">
+    @for (e of scene().events(); track e.name + e.time) {
+      <li>
+        <button [class.past]="e.time <= time()" (click)="seek.emit(e.time)">
+          <span class="when">{{ formatTime(e.time) }}</span>
+          <span class="what">{{ e.label }}</span>
+          <span class="alt">{{ e.z | number: '1.0-0' }} m</span>
+        </button>
+      </li>
+    }
+  </ol>
+
+  <h3>Summary</h3>
+  <table class="summary">
+    @for (row of summary(); track row.label) {
+      <tr>
+        <th scope="row">{{ row.label }}</th>
+        <td>{{ row.value }}</td>
+      </tr>
+    }
+  </table>
+  @if (meta().summary.max_mach > 0.8) {
+    <p class="warning">
+      This flight passes Mach {{ meta().summary.max_mach.toFixed(2) }}. The simulator's drag model is built
+      for subsonic flight, so treat results above Mach 0.8 as rough.
+    </p>
+  }
+
+  @if (scene().dispersion(); as d) {
+    <app-dispersion-panel [dispersion]="d" [nominalApogee]="meta().summary.apogee" />
+  }
+</section>
+
+@if (scene().charts(); as charts) {
+  <section class="panel charts" aria-label="Flight charts">
+    <app-flight-chart
+      title="Altitude" unit="m" [series]="charts.altitude"
+      [range]="range()" [time]="time()" [hoverTime]="hoverTime()"
+      (hover)="hoverTime.set($event)" (seek)="seek.emit($event)"
+    />
+    <app-flight-chart
+      title="Vertical speed" unit="m/s" [series]="charts.velocity"
+      [range]="range()" [time]="time()" [hoverTime]="hoverTime()"
+      (hover)="hoverTime.set($event)" (seek)="seek.emit($event)"
+    />
+    <app-flight-chart
+      title="Acceleration" unit="m/s²" [series]="charts.acceleration"
+      [range]="range()" [time]="time()" [hoverTime]="hoverTime()"
+      (hover)="hoverTime.set($event)" (seek)="seek.emit($event)"
+    />
+    <div class="axis">
+      <span>{{ formatTime(range().start) }}</span>
+      <span class="hint">click a chart to jump there</span>
+      <span>{{ formatTime(range().end) }}</span>
+    </div>
+
+    @if (hovered(); as h) {
+      <div class="tooltip" role="status">
+        <div class="t">{{ formatTime(h.time) }}</div>
+        @for (row of h.rows; track row.label) {
+          <div class="row"><i></i><strong>{{ row.value }}</strong><span>{{ row.label }}</span></div>
+        }
+      </div>
+    }
+  </section>
+}

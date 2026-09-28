@@ -1,8 +1,9 @@
 # Replay Data Format
 
-**Version:** 0.1
+**Version:** 0.2
 **Status:** Draft; applies to F1 session replays produced by `telemetry.f1.build_and_save`
-(used by `scripts/build_replay.py` and the backend's `/builds` endpoint)
+(used by `scripts/build_replay.py` and the backend's `/builds` endpoint) and rocket flights
+produced by `telemetry.rocket.replay.save_flight` (used by `scripts/simulate_rocket.py`)
 
 This document defines the format of replay data used across the platform. The data
 pipeline (`telemetry/f1.py`) produces it, the backend serves it, and the 3D viewer
@@ -17,8 +18,11 @@ consumes it. Any new data source (uploads, the rocket simulator) must produce th
   underscores (e.g. `italian_grand_prix_2024_r.parquet`). Older files named after
   the location (e.g. `monza_2024_r`) still work; the backend identifies sessions
   from each replay's `.meta.json`, not its filename.
-- **Companion files:** `<id>.meta.json` and `<id>.laps.json`. A replay counts as
-  built only when all three files exist (the laps file is written last).
+- **Companion files:** `<id>.meta.json`, plus `<id>.laps.json` for F1. An F1 replay
+  counts as built once all three files exist (the laps file is written last); a rocket
+  replay once its parquet and metadata exist (the metadata is written last).
+- **Domain:** the metadata's `domain` field, `"f1"` or `"rocket"`, says which scene and
+  panels show the replay. Replays without one are F1.
 - **Layout:** long format: one row per vehicle per sample
 - **Sort order:** by `time`, then `vehicle_id`
 
@@ -61,6 +65,36 @@ consumes it. Any new data source (uploads, the rocket simulator) must produce th
 **Required** columns are the minimum for the 3D viewer to place a vehicle.
 Optional columns power the dashboard, charts, and metrics.
 
+## Rocket flights
+
+Rocket replays (`domain: "rocket"`, ids `rocket_<name>_<motor>`) have a single vehicle,
+`rocket`. Time 0 is motor ignition; the flight ends at landing. The origin is the launch
+pad, with `x` east, `y` north and `z` up, so `z` is the altitude above the pad. Samples
+are every 0.01 s in powered and coasting flight and every 0.05 s under a parachute.
+
+The required columns and `speed` (km/h) are as above; rockets add:
+
+| Column              | Type    | Unit | Description |
+|---------------------|---------|------|-------------|
+| `qw`, `qx`, `qy`, `qz` | float64 | –  | Orientation: unit quaternion rotating the rocket's body frame (+z out of the nose) into the world frame |
+| `vertical_velocity` | float64 | m/s  | Up is positive |
+| `acceleration`      | float64 | m/s² | Magnitude of the total acceleration |
+| `mach`              | float64 | –    | Airspeed over the local speed of sound |
+| `dynamic_pressure`  | float64 | Pa   | ½ρv² of the airflow; its peak is "max Q" |
+| `angle_of_attack`   | float64 | °    | Angle between the rocket's axis and the airflow |
+| `stability_margin`  | float64 | cal  | Distance from CG back to CP, in body diameters |
+| `thrust`            | float64 | N    | Motor thrust |
+| `mass`              | float64 | kg   | Rocket plus remaining propellant |
+
+The metadata adds `rocket` (geometry: nose, body tubes, fins, motor and recovery, in
+meters, positions measured from the nose tip), `launch` (rail, wind and site),
+`summary` (apogee, max speed, Mach, acceleration and Q, landing point, flight time) and
+`events`, each `{name, time, x, y, z}`. Event names: `ignition`, `liftoff`,
+`rail_exit`, `burnout`, `apogee`, `ejection`, `deploy:<recovery device name>`, `landing`.
+
+To place the rocket at time `t`, interpolate position linearly and orientation with a
+quaternion slerp between the samples around `t`.
+
 ## Sampling and missing data
 
 - Each vehicle is sampled independently at irregular intervals (a few samples per
@@ -87,3 +121,4 @@ To get a vehicle's state at an arbitrary time `t`:
 ## Changelog
 
 - **0.1:** Initial format for F1 race replays.
+- **0.2:** `domain` in the metadata; rocket flights.

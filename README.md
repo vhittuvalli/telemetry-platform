@@ -1,50 +1,56 @@
 # Telemetry Platform
 
-A web platform for replaying and analyzing vehicle telemetry in 3D, starting with
-real Formula 1 race data. Pick a race, watch every car on track in a 3D replay,
-follow any driver, and explore synchronized charts and metrics.
+A web platform for replaying and analyzing vehicle telemetry in 3D. It shows two
+kinds of sessions on one engine: real Formula 1 races, and rocket flights from a
+built-in flight simulator.
 
-> **Status:** early development. The data pipeline is complete: it turns a full
-> F1 race into a single replay file with every car on a shared clock. The backend
-> API and 3D viewer are in progress.
+> **Status:** active development. F1 replays, the rocket simulator, the 3D viewer
+> for both, and Monte Carlo landing zones work today. Live telemetry over UDP is
+> planned.
 
 ## Features
 
-**Available now**
+**F1**
 - Load any F1 session available through [FastF1](https://github.com/theOehrly/Fast-F1)
-  (detailed telemetry from 2018 onward)
-- Merge each car's position and sensor data into one timeline
-- Place every car on a single shared session clock
-- Export a full race replay to Parquet with one command
+  (detailed telemetry from 2018 onward), on demand from the viewer or the CLI
+- Every car on track in 3D with a pit lane, starting grid and start lights
+- Leaderboard, driver dashboard, and chase and onboard cameras
 
-**Planned**
-- FastAPI backend serving replay data
-- 3D replay viewer (Angular + three.js): all cars on track, driver cameras,
-  playback controls, leaderboard
-- Synchronized charts (speed, throttle, brake) and live metrics
-- Race catalog, file uploads, and a rocket flight simulator on the same engine
+**Rockets**
+- 6-DOF flight simulator (thrust curves, drag, stability, weathercocking, wind,
+  launch rail, parachutes), validated against OpenRocket
+- Launch scene: pad and rail, a model built from the rocket's real geometry,
+  exhaust, parachutes, trajectory, altitude marks and flight events
+- Flight dashboard and time-synced altitude, speed and acceleration charts
+- Monte Carlo landing zones: hundreds of varied flights, with 50% and 95% ellipses
+- Re-simulate from the viewer with another motor, wind or rail angle
 
 ## Tech stack
 
-- **Data:** Python 3.12, FastF1, pandas, PyArrow (Parquet)
-- **Backend (planned):** FastAPI
-- **Frontend (planned):** Angular, three.js
+- **Data and simulation:** Python 3.12, FastF1, pandas, PyArrow (Parquet)
+- **Backend:** FastAPI
+- **Frontend:** Angular, three.js
 
 ## Project structure
 
 ```
 telemetry_platform/
-├── telemetry/          # Python package: data loading and processing
-│   └── f1.py           # FastF1 pipeline: load, merge, standardize, export
-├── scripts/
-│   └── build_replay.py # CLI to build a replay file for a session
-├── seed/replays/       # Replays baked into the deploy image
-├── notebooks/          # Exploration and verification
-├── docs/
-│   └── data-format.md  # Replay data format specification
-├── data/               # Cache and generated replays (not committed)
-├── pyproject.toml
-└── requirements.txt
+├── telemetry/            # Python package
+│   ├── f1.py             # FastF1 pipeline: load, merge, standardize, export
+│   └── rocket/           # Flight simulator, Monte Carlo, replay export
+├── backend/              # FastAPI app (replays, F1 catalog and builds, rockets)
+├── frontend/             # Angular + three.js viewer
+│   └── src/app/
+│       ├── engine/       # Shared renderer, camera and scene-module interface
+│       ├── f1/           # F1 scene: track, cars, pit lane, grid
+│       └── rocket/       # Rocket scene: launch site, model, trajectory
+├── rockets/              # Rocket designs (JSON) and motors (.eng)
+│   └── validation/       # OpenRocket's flights of the same designs
+├── scripts/              # CLIs: build F1 replays, simulate and validate rockets
+├── tests/                # Simulator, dispersion and API tests
+├── seed/replays/         # Replays baked into the deploy image
+├── docs/data-format.md   # Replay data format specification
+└── data/                 # Cache and generated replays (not committed)
 ```
 
 ## Getting started
@@ -129,6 +135,8 @@ the FastF1 cache and built replays, which are slow to recreate.
 | `TELEMETRY_DATA_DIR` | `/data`                  | FastF1 cache and replay files                        |
 | `ALLOW_BUILDS`       | `true`                   | `false` hides the FastF1 catalog and rejects builds  |
 | `REPLAY_CACHE_SIZE`  | `4`                      | Replays kept in memory (use 2 on a 512 MB host)      |
+| `ALLOW_MONTE_CARLO`  | same as `ALLOW_BUILDS`   | `false` turns off Monte Carlo runs on request         |
+| `MONTE_CARLO_WORKERS`| CPU count                | Processes for Monte Carlo runs                       |
 | `CORS_ORIGINS`       | `http://localhost:4200`  | Comma-separated origins, only if the frontend is hosted separately |
 
 Notes:
@@ -139,6 +147,55 @@ Notes:
   which downloads from FastF1 and uses a lot of CPU and memory. Builds run one
   at a time, but the queue has no limit.
 
+## Rocket flights
+
+Rocket designs live in `rockets/` as JSON (geometry, masses, motor, parachutes and
+default launch conditions), with motor thrust curves in `rockets/motors/` in the
+standard RASP `.eng` format. Simulate one and save it as a replay:
+
+```bash
+python scripts/simulate_rocket.py rockets/dual_parachute_deployment.json
+python scripts/simulate_rocket.py rockets/chute_release.json --wind 6 --wind-from 270 --angle 5
+python scripts/simulate_rocket.py rockets/chute_release.json --monte-carlo 500   # landing zone
+```
+
+From the viewer, **Change launch…** on a rocket flight re-simulates it with another
+motor (any that fits the motor mount), wind or rail angle. Those flights are kept in
+the server's memory, not saved.
+
+### Validation against OpenRocket
+
+The simulator follows the methods OpenRocket documents (Barrowman stability, skin
+friction, pressure and base drag). `rockets/validation/` holds OpenRocket 23.09's own
+flights of four of its example designs (Estes A8 up to AeroTech H669N); the tests
+check we agree with them:
+
+| Design (motor)                   | Apogee, ours vs OpenRocket | Max speed |
+|----------------------------------|----------------------------|-----------|
+| A simple model rocket (A8)       | 50.4 m vs 50.6 m (−0.3%)   | −0.0%     |
+| Presets (D12)                    | 304 m vs 309 m (−1.5%)     | −0.2%     |
+| Chute release (G40W)             | 307 m vs 307 m (−0.2%)     | −0.1%     |
+| Dual parachute deployment (H669N)| 596 m vs 592 m (+0.6%)     | +0.1%     |
+
+Compare any OpenRocket design yourself (needs Java, `requirements-dev.txt` and the
+[OpenRocket 23.09 jar](https://github.com/openrocket/openrocket/releases/tag/release-23.09)):
+
+```bash
+python scripts/openrocket_export.py my_rocket.ork --jar OpenRocket-23.09.jar
+python scripts/validate_rocket.py rockets/my_rocket.json
+```
+
+Limits: subsonic only (the panel warns above Mach 0.8); single stage and one motor;
+trapezoidal fins, no transitions, tube or freeform fins (the exporter warns when a
+design has parts it can't model aerodynamically); no roll.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests
+```
+
 ## Data format
 
 Replays use a long format: one row per car per sample, with time in seconds and
@@ -148,10 +205,11 @@ specification.
 ## Roadmap
 
 1. ✅ Data pipeline: FastF1 → standardized race replay
-2. ⏳ Backend API (FastAPI)
-3. ⏳ 3D replay viewer (Angular + three.js)
-4. ⏳ Deployment (Docker image ready)
-5. Later: race catalog, uploads, rocket simulator
+2. ✅ Backend API (FastAPI)
+3. ✅ 3D replay viewer (Angular + three.js)
+4. ✅ Deployment (Docker, Render)
+5. ✅ Rocket simulator, launch scene, Monte Carlo landing zones, re-simulation
+6. Next: live telemetry over UDP, then uploads
 
 ## Disclaimer
 

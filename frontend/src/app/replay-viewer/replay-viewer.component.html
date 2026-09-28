@@ -1,16 +1,21 @@
 <canvas #canvas tabindex="0"></canvas>
 
 @if (timeRange(); as range) {
-  @if (standings().length) {
-    <app-leaderboard
-      [rows]="standings()"
-      [lap]="lapText()"
-      [selected]="selectedDriver()"
-      (select)="selectDriver($event)"
-    />
+  @if (f1(); as f1) {
+    @if (f1.standings().length) {
+      <app-leaderboard
+        [rows]="f1.standings()"
+        [lap]="f1.lapText()"
+        [selected]="f1.selectedDriver()"
+        (select)="f1.selectDriver($event)"
+      />
+    }
+    @if (f1.selectedState(); as state) {
+      <app-dashboard [state]="state" [row]="f1.selectedRow()" />
+    }
   }
-  @if (selectedState(); as state) {
-    <app-dashboard [state]="state" [row]="selectedRow()" />
+  @if (rocket(); as r) {
+    <app-rocket-panels [scene]="r" (seek)="seekTo($event)" (relaunch)="relaunch.emit(r.meta)" />
   }
 
   <div class="controls">
@@ -38,15 +43,21 @@
       }
     </div>
 
-    <button [class.active]="showLabels()" (click)="toggleLabels()">Labels</button>
-    <div class="speeds">
-        <button [class.active]="cameraMode() === 'overview'" (click)="setCameraMode('overview')">Overview</button>
-        <button [class.active]="cameraMode() === 'chase'" [disabled]="!selectedDriver()" (click)="setCameraMode('chase')">Chase</button>
-        <button [class.active]="cameraMode() === 'onboard'" [disabled]="!selectedDriver()" (click)="setCameraMode('onboard')">Onboard</button>
-    </div>
+    @if (module(); as m) {
+      <button [class.active]="m.showLabels()" (click)="toggleLabels()">Labels</button>
+      <div class="speeds">
+        @for (c of m.cameraOptions; track c.id) {
+          <button
+            [class.active]="m.cameraMode() === c.id"
+            [disabled]="c.needsTarget && !m.hasTarget()"
+            (click)="setCameraMode(c.id)"
+          >{{ c.label }}</button>
+        }
+      </div>
+    }
   </div>
 } @else if (loadError()) {
   <div class="loading">{{ loadError() }}</div>
 } @else if (replayId()) {
-  <div class="loading">Loading race data…</div>
+  <div class="loading">Loading session data…</div>
 }

@@ -1,6 +1,6 @@
 import { Component, computed, input } from '@angular/core';
-import { VehicleState } from '../replay/vehicle-track';
-import { StandingRow } from '../replay/standings';
+import { VehicleState } from '../f1/vehicle-track';
+import { StandingRow } from '../f1/standings';
 
 const MAX_RPM = 12500;
 

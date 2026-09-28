@@ -1,0 +1,206 @@
+{
+  "name": "Dual parachute deployment",
+  "body_tubes": [
+    {
+      "length": 0.4064,
+      "diameter": 0.05,
+      "position": 0.28321
+    },
+    {
+      "length": 0.0254,
+      "diameter": 0.056642,
+      "position": 0.68961
+    },
+    {
+      "length": 0.30479999999999996,
+      "diameter": 0.056642,
+      "position": 0.71501
+    },
+    {
+      "length": 0.4572,
+      "diameter": 0.056642,
+      "position": 1.01981
+    }
+  ],
+  "fins": [
+    {
+      "count": 3,
+      "root_chord": 0.15239999999999998,
+      "tip_chord": 0.08889999999999999,
+      "span": 0.07619999999999999,
+      "sweep": 0.04399409051224947,
+      "thickness": 0.0023622,
+      "position": 1.3226034000000002,
+      "cross_section": "square"
+    }
+  ],
+  "masses": [
+    {
+      "name": "Nose cone",
+      "mass": 0.083846,
+      "cg": 0.17753,
+      "length": 0.28321,
+      "radius": 0.02832
+    },
+    {
+      "name": "Tube coupler",
+      "mass": 0.061817,
+      "cg": 0.29591,
+      "length": 0.0762,
+      "radius": 0.0273
+    },
+    {
+      "name": "Bulkhead",
+      "mass": 0.010426,
+      "cg": 0.33301,
+      "length": 0.002,
+      "radius": 0.0254
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.181023,
+      "cg": 0.48641,
+      "length": 0.4064,
+      "radius": 0.02832
+    },
+    {
+      "name": "Elliptical 12-Gore 42\" Parachute",
+      "mass": 0.104442,
+      "cg": 0.4318,
+      "length": 0.14478,
+      "radius": 0.0
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.004159,
+      "cg": 0.70231,
+      "length": 0.0254,
+      "radius": 0.02832
+    },
+    {
+      "name": "Tube coupler",
+      "mass": 0.104452,
+      "cg": 0.70231,
+      "length": 0.127,
+      "radius": 0.02733
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.135767,
+      "cg": 0.86741,
+      "length": 0.3048,
+      "radius": 0.02832
+    },
+    {
+      "name": "Apex 12\" Drouge Parachute",
+      "mass": 0.047294,
+      "cg": 0.86741,
+      "length": 0.06985,
+      "radius": 0.0
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.203651,
+      "cg": 1.24841,
+      "length": 0.4572,
+      "radius": 0.02832
+    },
+    {
+      "name": "Inner Tube",
+      "mass": 0.132194,
+      "cg": 1.27381,
+      "length": 0.4064,
+      "radius": 0.02032
+    },
+    {
+      "name": "Trapezoidal fin set",
+      "mass": 0.189786,
+      "cg": 1.40373,
+      "length": 0.1524,
+      "radius": 0.0
+    },
+    {
+      "name": "Tube coupler",
+      "mass": 0.083562,
+      "cg": 1.01981,
+      "length": 0.1016,
+      "radius": 0.02733
+    },
+    {
+      "name": "Bulkhead",
+      "mass": 0.010426,
+      "cg": 0.97001,
+      "length": 0.002,
+      "radius": 0.0254
+    },
+    {
+      "name": "Rail Button",
+      "mass": 0.002298,
+      "cg": 1.27381,
+      "length": 0.0,
+      "radius": 0.0
+    },
+    {
+      "name": "Centering Ring",
+      "mass": 0.005398,
+      "cg": 1.09066,
+      "length": 0.002,
+      "radius": 0.02733
+    },
+    {
+      "name": "Centering Ring",
+      "mass": 0.000119,
+      "cg": 1.3216,
+      "length": 0.002,
+      "radius": 0.02733
+    },
+    {
+      "name": "Centering Ring",
+      "mass": 0.000119,
+      "cg": 1.47601,
+      "length": 0.002,
+      "radius": 0.02733
+    }
+  ],
+  "launch_lugs": [],
+  "recovery": [
+    {
+      "name": "Elliptical 12-Gore 42\" Parachute",
+      "diameter": 1.0668,
+      "cd": 1.5,
+      "deploy": "altitude",
+      "deploy_altitude": 152.4,
+      "deploy_delay": 0.0
+    },
+    {
+      "name": "Apex 12\" Drouge Parachute",
+      "diameter": 0.30479999999999996,
+      "cd": 0.61,
+      "deploy": "apogee",
+      "deploy_altitude": null,
+      "deploy_delay": 0.0
+    }
+  ],
+  "nose": {
+    "shape": "ogive",
+    "length": 0.28321,
+    "diameter": 0.056642,
+    "shape_parameter": 1.0,
+    "position": 0.0
+  },
+  "motor": {
+    "file": "motors/aerotech_h669n.eng",
+    "aft_position": 1.48971,
+    "ejection_delay": Infinity
+  },
+  "launch": {
+    "rail_length": 3.048,
+    "angle": 0.0,
+    "heading": 90.0,
+    "wind_speed": 2.0,
+    "wind_from": 90.0,
+    "site_altitude": 0.0,
+    "temperature": 288.15,
+    "pressure": 101325.0
+  }
+}

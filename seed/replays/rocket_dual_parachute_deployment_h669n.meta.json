@@ -1,0 +1,225 @@
+{
+  "domain": "rocket",
+  "session": {
+    "year": 2026,
+    "event": "Dual parachute deployment",
+    "location": "Test range",
+    "name": "H669N flight",
+    "date": "2026-09-28T00:48:50"
+  },
+  "time_range": {
+    "start": 0.0,
+    "end": 66.216
+  },
+  "rocket": {
+    "id": "dual_parachute_deployment",
+    "name": "Dual parachute deployment",
+    "length": 1.477,
+    "diameter": 0.0566,
+    "cg": 0.9639,
+    "nose": {
+      "shape": "ogive",
+      "length": 0.28321,
+      "diameter": 0.056642,
+      "shape_parameter": 1.0,
+      "position": 0.0
+    },
+    "body_tubes": [
+      {
+        "length": 0.4064,
+        "diameter": 0.05,
+        "position": 0.28321
+      },
+      {
+        "length": 0.0254,
+        "diameter": 0.056642,
+        "position": 0.68961
+      },
+      {
+        "length": 0.30479999999999996,
+        "diameter": 0.056642,
+        "position": 0.71501
+      },
+      {
+        "length": 0.4572,
+        "diameter": 0.056642,
+        "position": 1.01981
+      }
+    ],
+    "fins": [
+      {
+        "count": 3,
+        "root_chord": 0.15239999999999998,
+        "tip_chord": 0.08889999999999999,
+        "span": 0.07619999999999999,
+        "sweep": 0.04399409051224947,
+        "thickness": 0.0023622,
+        "position": 1.3226034000000002,
+        "cross_section": "square"
+      }
+    ],
+    "motor": {
+      "designation": "H669N",
+      "manufacturer": "AeroTech",
+      "diameter": 0.038,
+      "length": 0.152,
+      "total_impulse": 219.75,
+      "burn_time": 0.329,
+      "max_thrust": 1178.0,
+      "aft_position": 1.48971,
+      "ejection_delay": null
+    },
+    "recovery": [
+      {
+        "name": "Elliptical 12-Gore 42\" Parachute",
+        "diameter": 1.0668,
+        "cd": 1.5,
+        "deploy": "altitude",
+        "deploy_altitude": 152.4,
+        "deploy_delay": 0.0
+      },
+      {
+        "name": "Apex 12\" Drouge Parachute",
+        "diameter": 0.30479999999999996,
+        "cd": 0.61,
+        "deploy": "apogee",
+        "deploy_altitude": null,
+        "deploy_delay": 0.0
+      }
+    ]
+  },
+  "launch": {
+    "rail_length": 3.048,
+    "angle": 0.0,
+    "heading": 90.0,
+    "wind_speed": 4.0,
+    "wind_from": 250.0,
+    "site_name": "Test range",
+    "site_altitude": 0.0,
+    "temperature": 288.15,
+    "pressure": 101325.0
+  },
+  "events": [
+    {
+      "name": "ignition",
+      "time": 0.0,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    {
+      "name": "liftoff",
+      "time": 0.0,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    {
+      "name": "rail_exit",
+      "time": 0.12,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 3.1
+    },
+    {
+      "name": "burnout",
+      "time": 0.329,
+      "x": -0.09,
+      "y": -0.03,
+      "z": 23.79
+    },
+    {
+      "name": "apogee",
+      "time": 10.3374,
+      "x": -5.14,
+      "y": -1.87,
+      "z": 595.25
+    },
+    {
+      "name": "deploy:Apex 12\" Drouge Parachute",
+      "time": 10.34,
+      "x": -5.14,
+      "y": -1.87,
+      "z": 595.25
+    },
+    {
+      "name": "deploy:Elliptical 12-Gore 42\" Parachute",
+      "time": 30.69,
+      "x": 58.34,
+      "y": 21.24,
+      "z": 151.44
+    },
+    {
+      "name": "landing",
+      "time": 66.216,
+      "x": 191.88,
+      "y": 69.84,
+      "z": 0.0
+    }
+  ],
+  "summary": {
+    "apogee": 595.25,
+    "apogee_time": 10.337,
+    "max_speed": 135.41,
+    "max_mach": 0.3984,
+    "max_acceleration": 620.48,
+    "max_q": 11225.1,
+    "max_q_time": 0.33,
+    "flight_time": 66.216,
+    "landing": [
+      191.88,
+      69.84
+    ],
+    "rail_exit_speed": 53.34
+  },
+  "dispersion": {
+    "runs": 500,
+    "succeeded": 500,
+    "seed": 1,
+    "variation": {
+      "wind_speed": 0.25,
+      "wind_speed_min": 0.5,
+      "wind_direction": 15.0,
+      "thrust": 0.03,
+      "rail_angle": 1.0,
+      "drag": 0.05,
+      "mass": 0.02,
+      "parachute_cd": 0.07,
+      "ejection_delay": 0.1
+    },
+    "apogee": {
+      "mean": 596.32,
+      "sd": 24.9,
+      "p5": 557.44,
+      "p95": 639.56
+    },
+    "landing": {
+      "zones": [
+        {
+          "probability": 0.5,
+          "center": [
+            188.14,
+            68.88
+          ],
+          "semi_major": 67.45,
+          "semi_minor": 66.43,
+          "angle": -22.42,
+          "observed": 0.512
+        },
+        {
+          "probability": 0.95,
+          "center": [
+            188.14,
+            68.88
+          ],
+          "semi_major": 140.23,
+          "semi_minor": 138.1,
+          "angle": -22.42,
+          "observed": 0.942
+        }
+      ],
+      "max_distance": 413.77,
+      "p95_distance": 303.74
+    }
+  }
+}

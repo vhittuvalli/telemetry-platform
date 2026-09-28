@@ -1,0 +1,26 @@
+<div class="head">
+  <span class="title">{{ title() }}</span>
+  <span class="value">{{ format(current()) }} <span class="unit">{{ unit() }}</span></span>
+</div>
+<svg
+  [attr.viewBox]="'0 0 ' + width + ' ' + height"
+  role="img"
+  [attr.aria-label]="title() + ' over the flight'"
+  (pointermove)="onMove($event)"
+  (pointerleave)="onLeave()"
+  (click)="onClick($event)"
+>
+  @for (v of yTicks(); track v) {
+    <line class="grid" [attr.x1]="left" [attr.x2]="right" [attr.y1]="y(v)" [attr.y2]="y(v)" />
+    <text class="tick" [attr.x]="left - 6" [attr.y]="y(v)">{{ format(v) }}</text>
+  }
+  <path class="line" [attr.d]="path()" />
+
+  @if (hovered(); as h) {
+    <line class="crosshair" [attr.x1]="h.x" [attr.x2]="h.x" [attr.y1]="0" [attr.y2]="height" />
+    <circle class="dot hover" [attr.cx]="h.x" [attr.cy]="h.y" r="4" />
+  }
+
+  <line class="playhead" [attr.x1]="x(time())" [attr.x2]="x(time())" [attr.y1]="0" [attr.y2]="height" />
+  <circle class="dot" [attr.cx]="x(time())" [attr.cy]="y(current())" r="4" />
+</svg>
