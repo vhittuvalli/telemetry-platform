@@ -1,0 +1,89 @@
+:host {
+  display: block;
+}
+
+h3 {
+  margin: 14px 0 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+
+  div { display: flex; flex-direction: column; }
+  .label { color: var(--text-secondary); font-size: 11px; }
+  .value { font-size: 17px; font-weight: 600; }
+  .unit { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+}
+
+.chart {
+  margin-top: 10px;
+}
+
+.caption {
+  min-height: 16px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+
+  strong { color: var(--text-primary); }
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 4px;
+  overflow: visible;
+}
+
+.baseline {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.bar {
+  fill: var(--series);
+}
+
+.hit {
+  fill: transparent;
+}
+
+.bin {
+  cursor: default;
+  outline: none;
+
+  &.active .bar { fill: #6aa6ee; }
+}
+
+.nominal {
+  stroke: var(--text-primary);
+  stroke-width: 1;
+}
+
+.nominal-label {
+  fill: var(--text-muted);
+  font-size: 9px;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}

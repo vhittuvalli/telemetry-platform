@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
-  BuildJob, CatalogEvent, LapRecord, ReplayDataWindow, ReplayMeta, ReplaySummary,
+  BuildJob, CatalogEvent, Dispersion, LapRecord, ReplayDataWindow, ReplayMeta, ReplaySummary,
 } from './replay.models';
 import { environment } from '../../environments/environment';
 
@@ -23,6 +23,9 @@ export class ReplayApiService {
     return this.http.get<ReplayDataWindow>(`${API_URL}/replays/${replayId}/data`, {
     params: { start, end },
     });
+  }
+  getDispersion(replayId: string): Observable<Dispersion> {
+    return this.http.get<Dispersion>(`${API_URL}/replays/${replayId}/dispersion`);
   }
   getLaps(replayId: string): Observable<LapRecord[]> {
     return this.http.get<LapRecord[]>(`${API_URL}/replays/${replayId}/laps`);

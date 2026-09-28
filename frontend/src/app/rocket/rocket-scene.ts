@@ -1,16 +1,18 @@
 import { computed, signal } from '@angular/core';
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { Observable, map, tap } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, tap } from 'rxjs';
 import { DataSource } from '../replay/replay-source';
-import { FlightEvent, RocketMeta } from '../replay/replay.models';
+import { Dispersion, FlightEvent, RocketMeta } from '../replay/replay.models';
+import { ReplayApiService } from '../replay/replay-api.service';
 import { CameraOption, SceneModule, Timeline } from '../engine/scene-module';
 import { ViewerEngine, toScene } from '../engine/viewer-engine';
 import { RocketState, RocketTrack } from './rocket-track';
 import { RocketModel, buildRocketModel } from './rocket-model';
 import { buildAltitudeRuler, buildLaunchSite, padLift } from './launch-site';
+import { buildLandingZone } from './landing-zone';
 
-type RocketCamera = 'follow' | 'ground' | 'overview';
+type RocketCamera = 'follow' | 'ground' | 'overview' | 'landing';
 
 /** A point on a chart: the flight's time and one channel's value. */
 export interface ChartSeries {
@@ -36,16 +38,13 @@ export function eventLabel(e: FlightEvent, meta: RocketMeta): string {
 /** A rocket flight: launch site, the rocket and its trajectory, flight dashboard and charts. */
 export class RocketScene implements SceneModule {
   readonly domain = 'rocket';
-  readonly cameraOptions: readonly CameraOption[] = [
-    { id: 'follow', label: 'Follow' },
-    { id: 'ground', label: 'Ground' },
-    { id: 'overview', label: 'Overview' },
-  ];
+  readonly cameraOptions: readonly CameraOption[];
   readonly showLabels = signal(true);
 
   // panel state
   readonly time = signal(0);
   readonly state = signal<RocketState | null>(null);
+  readonly dispersion = signal<Dispersion | null>(null);
   readonly charts = signal<{ altitude: ChartSeries; velocity: ChartSeries; acceleration: ChartSeries } | null>(null);
   readonly events = computed(() =>
     this.meta.events
@@ -76,11 +75,24 @@ export class RocketScene implements SceneModule {
   private tag?: CSS2DObject;
   private eventMarkers: { event: FlightEvent; label: CSS2DObject }[] = [];
   private rulerLabels: CSS2DObject[] = [];
+  private zoneLabels: CSS2DObject[] = [];
+  private zoneBounds?: THREE.Box3;
   private bounds = new THREE.Box3();
   private readonly baseFov: number;
   private readonly groundCamera: THREE.Vector3;
 
-  constructor(private engine: ViewerEngine, private source: DataSource, readonly meta: RocketMeta) {
+  constructor(
+    private engine: ViewerEngine,
+    private source: DataSource,
+    private api: ReplayApiService,
+    readonly meta: RocketMeta,
+  ) {
+    this.cameraOptions = [
+      { id: 'follow', label: 'Follow' },
+      { id: 'ground', label: 'Ground' },
+      { id: 'overview', label: 'Overview' },
+      ...(meta.dispersion ? [{ id: 'landing', label: 'Landing' }] : []),
+    ];
     const g = meta.rocket;
     this.lift = padLift(g.motor.aft_position - g.cg);
     this.baseFov = engine.camera.fov;
@@ -102,12 +114,25 @@ export class RocketScene implements SceneModule {
 
   load(): Observable<Timeline> {
     this.buildStatic();
-    return this.source.series(this.meta).pipe(
-      tap((vehicles) => {
+    return forkJoin({
+      vehicles: this.source.series(this.meta),
+      // Optional: without it the flight still plays, just without a landing zone
+      dispersion: this.meta.dispersion
+        ? this.api.getDispersion(this.source.id).pipe(catchError(() => of(null)))
+        : of(null),
+    }).pipe(
+      tap(({ vehicles, dispersion }) => {
         const series = vehicles.get('rocket') ?? vehicles.values().next().value;
         if (!series) throw new Error('Flight has no rocket data');
         this.track = new RocketTrack(series);
         this.buildFlight();
+        if (dispersion) {
+          const zone = buildLandingZone(dispersion);
+          this.engine.add(zone.group);
+          this.zoneLabels = zone.labels;
+          this.zoneBounds = zone.bounds.expandByPoint(new THREE.Vector3(0, 0, 0)); // keep the pad in view
+          this.dispersion.set(dispersion);
+        }
         this.charts.set({
           altitude: this.chartSeries('z'),
           velocity: this.chartSeries('vertical_velocity'),
@@ -259,7 +284,7 @@ export class RocketScene implements SceneModule {
       label.visible = show;
       label.element.classList.toggle('upcoming', event.time > t);
     }
-    for (const label of this.rulerLabels) label.visible = show;
+    for (const label of [...this.rulerLabels, ...this.zoneLabels]) label.visible = show;
     if (this.tag) this.tag.visible = show && this.mode() !== 'follow';
   }
 
@@ -280,7 +305,16 @@ export class RocketScene implements SceneModule {
     camera.fov = this.baseFov;
     camera.updateProjectionMatrix();
     if (mode === 'overview') this.resetView();
+    if (mode === 'landing') this.frameLandingZone();
     return true;
+  }
+
+  /** Look straight down on the landing zone and the pad. */
+  private frameLandingZone(): void {
+    if (!this.zoneBounds) return;
+    const center = this.zoneBounds.getCenter(new THREE.Vector3());
+    const size = this.zoneBounds.getSize(new THREE.Vector3());
+    this.engine.frame(center, Math.max(0.5 * Math.hypot(size.x, size.z), 20), 80);
   }
 
   private updateCamera(dt: number): void {
@@ -290,7 +324,7 @@ export class RocketScene implements SceneModule {
     const length = this.meta.rocket.length;
     const altitude = Math.max(root.position.y - this.lift, 0);
 
-    if (mode === 'overview') {
+    if (mode === 'overview' || mode === 'landing') {
       // The rocket is tiny against its trajectory: enlarge it with distance so it stays visible
       const distance = camera.position.distanceTo(root.position);
       root.scale.setScalar(THREE.MathUtils.clamp(distance / (length * 60), 1, 200));

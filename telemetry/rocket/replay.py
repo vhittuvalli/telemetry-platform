@@ -80,10 +80,19 @@ def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: dateti
     }
 
 
-def save_flight(rocket: Rocket, launch: Launch, flight: Flight, replays_dir: Path = REPLAYS_DIR) -> str:
-    """Write the flight's replay files; returns the replay id."""
+def save_flight(rocket: Rocket, launch: Launch, flight: Flight, replays_dir: Path = REPLAYS_DIR,
+                dispersion: dict | None = None) -> str:
+    """Write the flight's replay files (and Monte Carlo results, if given); returns the replay id."""
     stem = replay_id(rocket)
+    meta = flight_metadata(rocket, launch, flight)
+    dispersion_path = replays_dir / f"{stem}.dispersion.json"
+    if dispersion:
+        save_metadata(dispersion, dispersion_path)
+        # The summary rides along in the metadata; the individual runs are fetched separately
+        meta["dispersion"] = {k: v for k, v in dispersion.items() if k not in ("landings", "apogees")}
+    elif dispersion_path.exists():
+        dispersion_path.unlink()  # results from an earlier flight no longer apply
     #metadata is written last: a rocket replay counts as built once both files exist
     save_replay(flight_frame(flight), replays_dir / f"{stem}.parquet")
-    save_metadata(flight_metadata(rocket, launch, flight), replays_dir / f"{stem}.meta.json")
+    save_metadata(meta, replays_dir / f"{stem}.meta.json")
     return stem

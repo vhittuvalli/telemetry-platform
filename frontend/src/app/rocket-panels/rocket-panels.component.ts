@@ -2,6 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { Component, computed, input, output, signal } from '@angular/core';
 import { RocketScene } from '../rocket/rocket-scene';
 import { FlightChartComponent, valueAt } from './flight-chart.component';
+import { DispersionPanelComponent } from './dispersion-panel.component';
 
 const G = 9.80665;
 
@@ -9,7 +10,7 @@ const G = 9.80665;
 @Component({
   selector: 'app-rocket-panels',
   standalone: true,
-  imports: [FlightChartComponent, DecimalPipe],
+  imports: [FlightChartComponent, DispersionPanelComponent, DecimalPipe],
   templateUrl: './rocket-panels.component.html',
   styleUrl: './rocket-panels.component.scss',
 })

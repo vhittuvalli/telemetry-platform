@@ -128,7 +128,8 @@ class Flight:
 
     @property
     def apogee(self) -> float:
-        return max(self.columns["z"])
+        e = self.event("apogee")
+        return max(max(self.columns["z"]), e.altitude if e else 0.0)
 
     @property
     def landing(self) -> tuple[float, float]:
@@ -246,8 +247,12 @@ def _rk4(f, t, s, dt):
 
 
 def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: float = 0.05,
-             max_time: float = 3600.0) -> Flight:
-    """Fly `rocket` from ignition (t = 0) to landing."""
+             max_time: float = 3600.0, record_samples: bool = True) -> Flight:
+    """Fly `rocket` from ignition (t = 0) to landing.
+
+    With `record_samples` off, only the first and last samples are kept (events are
+    always recorded); dispersion runs use this, since they only need the outcome.
+    """
     model = _Model(rocket, launch)
     rail = launch.rail_direction
     q0 = pointing(math.radians(90 - launch.angle), math.radians(launch.heading))
@@ -304,6 +309,8 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
                 event("liftoff", t - step, 0.0)
             if not lifted:
                 state = prev  # still sitting on the pad: thrust hasn't overcome weight yet
+                if t > burnout:
+                    raise ValueError(f"{rocket.motor.designation} never lifts {rocket.name} off the pad")
             if travelled >= launch.rail_length:
                 phase = "flight"
                 event("rail_exit", t, state[2])
@@ -351,7 +358,7 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
         else:
             state = (*state[0:6], *qnormalize(state[6:10]), *state[10:13])
 
-        if t - last_record >= (0.05 if phase == "descent" else 0.01) - 1e-9:
+        if record_samples and t - last_record >= (0.05 if phase == "descent" else 0.01) - 1e-9:
             record(t, state)
 
     return Flight(columns, sorted(events, key=lambda e: e.time))

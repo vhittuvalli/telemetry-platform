@@ -129,3 +129,8 @@ def get_replay_laps(replay_id: str, driver: str | None = None):
     if driver is not None:
         laps = [lap for lap in laps if lap["driver"] == driver]
     return laps
+
+@router.get("/{replay_id}/dispersion")
+def get_replay_dispersion(replay_id: str):
+    """Monte Carlo results for a rocket flight: every run's landing point and apogee, and their spread."""
+    return read_json(replay_id, ".dispersion.json")

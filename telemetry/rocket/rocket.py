@@ -154,6 +154,7 @@ class Rocket:
     launch_lugs: list[LaunchLug] = field(default_factory=list)
     roughness: float = 60e-6       # surface roughness, m (60 µm: regular paint)
     cd_override: float | None = None
+    cd_scale: float = 1.0          # multiplies the drag coefficient (for dispersion runs)
 
     # ---------- geometry ----------
 
@@ -226,7 +227,10 @@ class Rocket:
     def drag_coefficient(self, speed: float, air: Air) -> float:
         """Zero-angle-of-attack drag coefficient, referenced to the body's cross-section."""
         if self.cd_override is not None:
-            return self.cd_override
+            return self.cd_override * self.cd_scale
+        return self._drag_coefficient(speed, air) * self.cd_scale
+
+    def _drag_coefficient(self, speed: float, air: Air) -> float:
         mach = speed / air.speed_of_sound
         a_ref = self.reference_area
         length = self.length

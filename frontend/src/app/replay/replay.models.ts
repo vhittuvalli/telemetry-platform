@@ -78,6 +78,30 @@ export interface RocketMeta {
   };
   events: FlightEvent[];
   summary: FlightSummary;
+  dispersion?: DispersionSummary; // present when Monte Carlo runs were made for this flight
+}
+
+export interface LandingZone {
+  probability: number;      // share of landings the ellipse is expected to hold
+  observed: number;         // share of the runs that actually landed inside it
+  center: [number, number]; // m, x east / y north of the pad
+  semi_major: number;       // m
+  semi_minor: number;       // m
+  angle: number;            // degrees, major axis counterclockwise from east
+}
+
+export interface DispersionSummary {
+  runs: number;
+  succeeded: number;
+  seed: number;
+  variation: Record<string, number>;
+  apogee: { mean: number; sd: number; p5: number; p95: number };
+  landing: { zones: LandingZone[]; max_distance: number; p95_distance: number };
+}
+
+export interface Dispersion extends DispersionSummary {
+  landings: [number, number][];
+  apogees: number[];
 }
 
 export type ReplayMeta = F1Meta | RocketMeta;

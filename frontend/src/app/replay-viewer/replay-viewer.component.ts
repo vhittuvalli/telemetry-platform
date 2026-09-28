@@ -88,7 +88,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   // ---------- loading and switching sessions ----------
 
   private createModule(source: ReplaySource, meta: ReplayMeta): SceneModule {
-    if (meta.domain === 'rocket') return new RocketScene(this.engine, source, meta);
+    if (meta.domain === 'rocket') return new RocketScene(this.engine, source, this.api, meta);
     return new F1Scene(this.engine, source, this.api, meta);
   }
 

@@ -43,6 +43,10 @@
       </tr>
     }
   </table>
+
+  @if (scene().dispersion(); as d) {
+    <app-dispersion-panel [dispersion]="d" [nominalApogee]="meta().summary.apogee" />
+  }
 </section>
 
 @if (scene().charts(); as charts) {

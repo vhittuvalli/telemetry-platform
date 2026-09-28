@@ -54,3 +54,12 @@ html, body {
   font-weight: 500;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
+
+.zone-label {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffd28a;
+  font: 600 11px system-ui, sans-serif;
+  white-space: nowrap;
+}
