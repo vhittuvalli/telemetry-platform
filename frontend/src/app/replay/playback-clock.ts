@@ -3,7 +3,7 @@ export class PlaybackClock {
   playing = false;
   speed = 1;
 
-  constructor(public readonly start: number, public readonly end: number) {
+  constructor(public readonly start: number, public end: number) {
     this.time = start;
   }
 

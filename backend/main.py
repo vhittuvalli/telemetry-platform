@@ -1,9 +1,10 @@
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 
-from backend.routers import catalog, replays, rockets
+from backend.routers import catalog, live, replays, rockets
 """don't store replay endpoints here use a
 router so its easier to compile in main.py"""
 
@@ -16,11 +17,20 @@ CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:4200").split(","
 #built Angular app; served at / when present so one container runs the whole site
 FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", Path(__file__).resolve().parent.parent / "frontend/dist/frontend/browser"))
 
-app = FastAPI(title="Telemetry Platform API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    udp = await live.start_udp()
+    yield
+    if udp:
+        udp.close()
+
+
+app = FastAPI(title="Telemetry Platform API", lifespan=lifespan)
 app.include_router(replays.router)
 app.include_router(catalog.catalog_router)
 app.include_router(catalog.builds_router)
 app.include_router(rockets.router)
+app.include_router(live.router)
 app.add_middleware(GZipMiddleware, minimum_size=1000) #compress API responses
 
 app.add_middleware(

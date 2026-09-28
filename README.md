@@ -5,8 +5,8 @@ kinds of sessions on one engine: real Formula 1 races, and rocket flights from a
 built-in flight simulator.
 
 > **Status:** active development. F1 replays, the rocket simulator, the 3D viewer
-> for both, and Monte Carlo landing zones work today. Live telemetry over UDP is
-> planned.
+> for both, Monte Carlo landing zones and live rocket telemetry (UDP or WebSocket)
+> work today. Live F1 sessions are planned.
 
 ## Features
 
@@ -143,6 +143,7 @@ the FastF1 cache and built replays, which are slow to recreate.
 | `REPLAY_CACHE_SIZE`  | `4`                      | Replays kept in memory (use 2 on a 512 MB host)      |
 | `ALLOW_MONTE_CARLO`  | same as `ALLOW_BUILDS`   | `false` turns off Monte Carlo runs on request         |
 | `MONTE_CARLO_WORKERS`| CPU count                | Processes for Monte Carlo runs                       |
+| `LIVE_UDP_PORT`      | `9870`                   | UDP port for live telemetry (empty turns it off)     |
 | `CORS_ORIGINS`       | `http://localhost:4200`  | Comma-separated origins, only if the frontend is hosted separately |
 
 Notes:
@@ -195,6 +196,34 @@ Limits: subsonic only (the panel warns above Mach 0.8); single stage and one mot
 trapezoidal fins, no transitions, tube or freeform fins (the exporter warns when a
 design has parts it can't model aerodynamically); no roll.
 
+## Live telemetry
+
+Stream a flight to the platform while it happens, the way a flight computer sends
+telemetry to a ground station. Anyone with the session's code watches it live in the
+3D viewer; when the stream ends it's saved as a replay.
+
+```bash
+# the simulator as a live rocket: UDP to a server running on this machine
+python scripts/stream_rocket.py rockets/dual_parachute_deployment.json
+
+# to the deployed site: web hosts only accept HTTP, so relay UDP over a WebSocket
+python scripts/telemetry_relay.py --site https://telemetry-platform.onrender.com
+python scripts/stream_rocket.py rockets/chute_release.json --site https://telemetry-platform.onrender.com
+
+# or skip UDP and send straight over a WebSocket
+python scripts/stream_rocket.py rockets/chute_release.json --site https://telemetry-platform.onrender.com --websocket
+
+# re-stream a saved flight
+python scripts/stream_rocket.py --replay data/replays/rocket_chute_release_g40w
+```
+
+The streamer prints a link like `https://…/?live=K7Q4MX`; open it on any device, or
+enter the code under **Live now** in the session picker. The viewer follows the live
+edge; drag back to rewatch, and **● Live** jumps back. To write your own sender (a
+flight computer, a phone app, a game), see [docs/live-protocol.md](docs/live-protocol.md).
+
+Live sessions are rocket-only for now.
+
 ## Tests
 
 ```bash
@@ -215,7 +244,8 @@ specification.
 3. ✅ 3D replay viewer (Angular + three.js)
 4. ✅ Deployment (Docker, Render)
 5. ✅ Rocket simulator, launch scene, Monte Carlo landing zones, re-simulation
-6. Next: live telemetry over UDP, then uploads
+6. ✅ Live telemetry: UDP and WebSocket senders, relay, live viewing, recording
+7. Next: live F1 sessions, then uploads
 
 ## Disclaimer
 

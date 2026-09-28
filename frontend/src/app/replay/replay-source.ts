@@ -5,6 +5,8 @@ import { ReplayMeta, Series } from './replay.models';
 /** Where a session's data comes from. Replay files today; a live stream can implement the same shape later. */
 export interface DataSource {
   readonly id: string;
+  /** Live sources keep emitting from `series` as data arrives. */
+  readonly live?: boolean;
   meta(): Observable<ReplayMeta>;
   /** Every vehicle's full series for the session, keyed by vehicle id. */
   series(meta: ReplayMeta): Observable<Map<string, Series>>;

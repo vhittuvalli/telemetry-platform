@@ -23,6 +23,15 @@
       {{ playing() ? '❚❚' : '▶' }}
     </button>
 
+    @if (liveSource(); as live) {
+      @if (live.ended()) {
+        <span class="live-badge ended" title="The stream has ended{{ live.replayId() ? ' and was saved as a replay' : '' }}">Ended</span>
+      } @else {
+        <button class="live-badge" [class.on]="following()" (click)="goLive()"
+                [title]="following() ? 'Watching live' : 'Jump back to live'">● Live · {{ live.code }}</button>
+      }
+    }
+
     <span class="time">{{ formatTime(currentTime()) }}</span>
 
     <input

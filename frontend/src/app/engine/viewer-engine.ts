@@ -52,6 +52,16 @@ export class ViewerEngine {
     this.scene.add(obj);
   }
 
+  /** Remove and free one object added with `add`. */
+  remove(obj: THREE.Object3D): void {
+    this.scene.remove(obj);
+    obj.traverse((child) => {
+      if (child instanceof CSS2DObject) child.element.remove();
+    });
+    disposeObject(obj);
+    this.owned = this.owned.filter((o) => o !== obj);
+  }
+
   /** Remove and free everything added with `add`, and reset the scene's look. */
   clear(): void {
     for (const obj of this.owned) {

@@ -1,9 +1,10 @@
-import { computed, signal } from '@angular/core';
+import { WritableSignal, computed, signal } from '@angular/core';
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { Observable, catchError, forkJoin, map, of, tap } from 'rxjs';
+import { Observable, catchError, combineLatest, map, of } from 'rxjs';
 import { DataSource } from '../replay/replay-source';
-import { Dispersion, FlightEvent, RocketMeta } from '../replay/replay.models';
+import { Dispersion, FlightEvent, FlightSummary, RocketMeta, Series } from '../replay/replay.models';
+import { LiveSource } from '../replay/live-source';
 import { ReplayApiService } from '../replay/replay-api.service';
 import { CameraOption, SceneModule, Timeline } from '../engine/scene-module';
 import { ViewerEngine, toScene } from '../engine/viewer-engine';
@@ -55,6 +56,11 @@ export class RocketScene implements SceneModule {
   readonly domain = 'rocket';
   readonly cameraOptions: readonly CameraOption[];
   readonly showLabels = signal(true);
+  /** The flight's metadata; for live flights, events and summary update as data arrives. */
+  readonly info: WritableSignal<RocketMeta>;
+  get meta(): RocketMeta {
+    return this.info();
+  }
 
   // panel state
   readonly time = signal(0);
@@ -81,6 +87,8 @@ export class RocketScene implements SceneModule {
   });
 
   private track?: RocketTrack;
+  private flightObjects: THREE.Object3D[] = [];
+  private smokeBuilt = 0;
   private smoke?: Smoke;
   private glow?: THREE.Sprite;
   private nozzleLight?: THREE.PointLight;
@@ -105,8 +113,9 @@ export class RocketScene implements SceneModule {
     private engine: ViewerEngine,
     private source: DataSource,
     private api: ReplayApiService,
-    readonly meta: RocketMeta,
+    meta: RocketMeta,
   ) {
+    this.info = signal(meta);
     this.cameraOptions = [
       { id: 'follow', label: 'Follow' },
       { id: 'ground', label: 'Ground' },
@@ -134,35 +143,64 @@ export class RocketScene implements SceneModule {
 
   load(): Observable<Timeline> {
     this.buildStatic();
-    return forkJoin({
-      vehicles: this.source.series(this.meta),
+    const live = !!this.source.live;
+    return combineLatest([
+      this.source.series(this.meta),
       // Optional: without it the flight still plays, just without a landing zone
-      dispersion: this.meta.dispersion
+      this.meta.dispersion
         ? this.api.getDispersion(this.source.id).pipe(catchError(() => of(null)))
         : of(null),
-    }).pipe(
-      tap(({ vehicles, dispersion }) => {
+    ]).pipe(
+      map(([vehicles, dispersion]) => {
         const series = vehicles.get('rocket') ?? vehicles.values().next().value;
         if (!series) throw new Error('Flight has no rocket data');
-        this.track = new RocketTrack(series);
-        this.buildFlight();
-        this.buildSmoke();
-        if (dispersion) {
-          const zone = buildLandingZone(dispersion);
-          this.engine.add(zone.group);
-          this.zoneLabels = zone.labels;
-          this.zoneBounds = zone.bounds.expandByPoint(new THREE.Vector3(0, 0, 0)); // keep the pad in view
-          this.dispersion.set(dispersion);
-        }
-        this.charts.set({
-          altitude: this.chartSeries('z'),
-          velocity: this.chartSeries('vertical_velocity'),
-          acceleration: this.chartSeries('acceleration'),
-        });
-        this.setCameraMode(this.mode()); // the engine starts every session with orbit controls on
+        this.apply(series, dispersion);
+        return { start: this.track!.start, end: this.track!.end, openAt: live ? this.track!.end : 0, live };
       }),
-      map(() => ({ start: this.meta.time_range.start, end: this.meta.time_range.end, openAt: 0 })),
     );
+  }
+
+  /** Build (or, for a live flight, rebuild) everything that depends on the flight's data. */
+  private apply(series: Series, dispersion: Dispersion | null): void {
+    const first = !this.track;
+    this.track = new RocketTrack(series);
+    if (this.source instanceof LiveSource) {
+      const meta = this.source.currentMeta();
+      this.info.set({ ...meta, summary: summarize(this.track, meta.events) });
+    }
+
+    for (const obj of this.flightObjects) this.engine.remove(obj);
+    this.flightObjects = [];
+    this.buildFlight();
+    // Smoke is the costliest to rebuild; once a second is plenty while live
+    const now = performance.now();
+    if (first || !this.source.live || now - this.smokeBuilt > 1000) {
+      if (this.smoke) this.engine.remove(this.smoke.points);
+      this.buildSmoke();
+      this.smokeBuilt = now;
+    }
+    this.charts.set({
+      altitude: this.chartSeries('z'),
+      velocity: this.chartSeries('vertical_velocity'),
+      acceleration: this.chartSeries('acceleration'),
+    });
+
+    if (!first) return;
+    if (dispersion) {
+      const zone = buildLandingZone(dispersion);
+      this.engine.add(zone.group);
+      this.zoneLabels = zone.labels;
+      this.zoneBounds = zone.bounds.expandByPoint(new THREE.Vector3(0, 0, 0)); // keep the pad in view
+      this.dispersion.set(dispersion);
+    }
+    this.resetView();
+    this.setCameraMode(this.mode()); // the engine starts every session with orbit controls on
+  }
+
+  /** Add an object that belongs to the current data, to be replaced when more arrives. */
+  private addFlight(obj: THREE.Object3D): void {
+    this.flightObjects.push(obj);
+    this.engine.add(obj);
   }
 
   private railDirection(): THREE.Vector3 {
@@ -220,18 +258,19 @@ export class RocketScene implements SceneModule {
 
     // Whole path faint; the part already flown drawn over it
     const path = new THREE.BufferGeometry().setFromPoints(points);
-    this.engine.add(new THREE.Line(path, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 })));
+    this.addFlight(new THREE.Line(path, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 })));
     this.trail = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(points),
       new THREE.LineBasicMaterial({ color: 0xffd28a }),
     );
-    this.engine.add(this.trail);
+    this.addFlight(this.trail);
 
-    const apogee = this.meta.summary.apogee;
+    const apogee = Math.max(this.meta.summary.apogee, 10); // a live flight may not have climbed yet
     const ruler = buildAltitudeRuler(apogee, new THREE.Vector3(-Math.max(8, apogee * 0.06), 0, 0));
-    this.engine.add(ruler.group);
+    this.addFlight(ruler.group);
     this.rulerLabels = ruler.labels;
 
+    this.eventMarkers = [];
     for (const e of this.events()) {
       if (e.name === 'liftoff' || e.name === 'rail_exit') continue; // too close to the pad to label
       const marker = new THREE.Group();
@@ -241,10 +280,9 @@ export class RocketScene implements SceneModule {
       el.textContent = e.name === 'apogee' ? `${e.label} · ${Math.round(e.z).toLocaleString()} m` : e.label;
       const label = new CSS2DObject(el);
       marker.add(label);
-      this.engine.add(marker);
+      this.addFlight(marker);
       this.eventMarkers.push({ event: e, label });
     }
-    this.resetView();
   }
 
   /** Smoke puffs along the flight: a thick trail while the motor burns, a thin one from the delay grain after. */
@@ -455,4 +493,31 @@ export class RocketScene implements SceneModule {
     camera.updateProjectionMatrix();
     this.engine.clear();
   }
+}
+
+/** The flight summary a finished replay carries, from the samples received so far (live flights). */
+function summarize(track: RocketTrack, events: FlightEvent[]): FlightSummary {
+  const t = track.time;
+  const n = t.length;
+  const argmax = (v: number[]) => v.reduce((best, x, i) => (x > v[best] ? i : best), 0);
+  const z = track.values('z');
+  const q = track.values('dynamic_pressure');
+  const speed = track.values('speed');
+  const at = (name: string) => events.find((e) => e.name === name)?.time;
+  const iApo = argmax(z);
+  const iQ = argmax(q);
+  const railExit = at('rail_exit');
+  const iRail = railExit == null ? -1 : t.findIndex((x) => x >= railExit);
+  return {
+    apogee: z[iApo],
+    apogee_time: at('apogee') ?? null,
+    max_speed: speed[argmax(speed)] / 3.6,
+    max_mach: track.values('mach')[argmax(track.values('mach'))],
+    max_acceleration: track.values('acceleration')[argmax(track.values('acceleration'))],
+    max_q: q[iQ],
+    max_q_time: t[iQ],
+    flight_time: t[n - 1],
+    landing: [track.values('x')[n - 1], track.values('y')[n - 1]],
+    rail_exit_speed: iRail >= 0 ? speed[iRail] / 3.6 : 0,
+  };
 }

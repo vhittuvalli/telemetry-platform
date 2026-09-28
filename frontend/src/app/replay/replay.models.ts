@@ -217,3 +217,17 @@ export interface SimulationRequest {
   heading: number;
   monte_carlo: number;
 }
+
+export interface LiveSessionInfo {
+  code: string;
+  domain: string;
+  name: string | null;
+  samples: number;
+  packets: number;
+  lost: number;
+  latest: number | null;
+  ended: boolean;
+  replay_id: string | null;
+  age: number; // s since it started
+  meta?: Record<string, unknown>;
+}
