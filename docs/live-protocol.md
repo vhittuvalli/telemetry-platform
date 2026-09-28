@@ -107,15 +107,15 @@ format; errors come back as `{"error": "…"}` messages.
 
 ## Watching (for viewers other than the web app)
 
-`wss://<site>/live/sessions/<code>/watch` sends a `snapshot` of everything so far
-(`meta`, `vehicles` with each vehicle's columns, `events`, `laps`), then `data` messages
+`wss://<site>/live/sessions/<code>/watch` sends a `snapshot` of the session so far
+(`meta`, `events`, `laps`), one `vehicle` message per vehicle with its columns, then `data` messages
 with new `samples`, `events` and `laps` about ten times a second, and an `end` message with
 the recording's `replay_id`.
 
 ## Limits
 
 - Sessions end after 10 minutes without packets. A rocket session keeps 60,000 samples
-  (ten minutes at 100 Hz); an F1 session keeps 300,000 (about an hour of a full grid at 4 Hz).
+  (ten minutes at 100 Hz); an F1 session keeps 450,000 (a full race; Monza 2024 is 360,000).
 - Live F1 views show the track, cars and leaderboard; the pit lane and starting grid are
   worked out from a whole session, so they appear in the recording, not live.
 - At most 20 live sessions at once per server.

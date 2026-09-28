@@ -10,7 +10,7 @@
     python scripts/stream_f1.py data/replays/monza_2024_r --site https://telemetry-platform.onrender.com --websocket
 
 Build a replay first if you don't have one (scripts/build_replay.py, or the race picker).
-A server keeps up to 300,000 samples per live F1 session, about an hour of a full grid.
+A server keeps up to 450,000 samples per live F1 session, enough for a full race.
 """
 
 import argparse

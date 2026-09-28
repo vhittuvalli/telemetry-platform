@@ -45,8 +45,8 @@ class Domain:
 DOMAINS = {
     # ten minutes at 100 Hz
     "rocket": Domain(ROCKET_CHANNELS, {"qw": 1.0}, 60_000),
-    # about an hour of a full grid at 4 Hz; ~25 MB in compact arrays
-    "f1": Domain(F1_CHANNELS, {"on_track": 1.0}, 300_000),
+    # a full race (Monza 2024 is 360,000) with room to spare; ~40 MB in compact arrays
+    "f1": Domain(F1_CHANNELS, {"on_track": 1.0}, 450_000),
 }
 LAP_FIELDS = ("lap_time", "lap_end", "position", "tyre_life", "stint", "pit_in", "pit_out")
 
@@ -94,12 +94,18 @@ class LiveSession:
         }
 
     def snapshot(self) -> dict:
-        """Everything so far, for a viewer that just joined."""
+        """What a viewer that just joined needs first; each vehicle's data follows in `vehicle_snapshots`."""
         return {
             "type": "snapshot", "meta": self.meta, "events": self.events, "laps": list(self.laps.values()),
-            "vehicles": {vid: {c: list(values) for c, values in cols.items()} for vid, cols in self.vehicles.items()},
-            "ended": self.ended, "replay_id": self.replay_id,
+            "vehicles": {}, "ended": self.ended, "replay_id": self.replay_id,
         }
+
+    def vehicle_snapshots(self):
+        """Each vehicle's samples so far, one message at a time: a whole race in one message
+        would briefly need well over 100 MB, more than a small host has spare."""
+        for vid in list(self.vehicles):
+            cols = self.vehicles[vid]
+            yield {"type": "vehicle", "id": vid, "columns": {c: list(values) for c, values in cols.items()}}
 
 
 _sessions: dict[str, LiveSession] = {}
