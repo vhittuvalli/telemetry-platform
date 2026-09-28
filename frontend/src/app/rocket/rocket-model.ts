@@ -38,8 +38,8 @@ export interface RocketModel {
 
 const WHITE = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5 });
 const NOSE = new THREE.MeshStandardMaterial({ color: 0xd23c2c, roughness: 0.4 });
-const FIN = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6 });
-const NOZZLE = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.6, roughness: 0.4 });
+const FIN = new THREE.MeshStandardMaterial({ color: 0x3f6fb5, roughness: 0.5 });
+const NOZZLE = new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.6, roughness: 0.4 });
 const CHUTE_COLORS = [0xe8542f, 0xf0b400, 0x3987e5];
 
 /** A 1:1 model of the simulated rocket, built from the flight's geometry. */
