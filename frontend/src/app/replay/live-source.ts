@@ -116,6 +116,10 @@ export class LiveSource implements DataSource {
             this.addLaps(m.laps ?? []);
             if (m.ended) this.finish(m.replay_id);
             schedule();
+          } else if (m.type === 'vehicle') {
+            // The snapshot's data, one vehicle per message
+            this.vehicles[m.id] = m.columns;
+            schedule();
           } else if (m.type === 'data') {
             for (const sample of m.samples) this.add(sample);
             this.events = [...this.events, ...m.events].sort((a, b) => a.time - b.time);

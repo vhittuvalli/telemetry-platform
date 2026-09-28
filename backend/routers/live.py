@@ -30,7 +30,7 @@ def create_session(req: NewSession):
     except live.LiveError as err:
         raise HTTPException(status_code=422, detail=str(err))
     return {"code": session.code, "key": session.key, "udp_port": UDP_PORT or None,
-            "protocol_version": live.PROTOCOL_VERSION}
+            "protocol_version": live.PROTOCOL_VERSION, "max_samples": session.spec.max_samples}
 
 
 @router.get("/sessions")
@@ -76,6 +76,8 @@ async def watch_socket(ws: WebSocket, code: str):
     session.watchers.add(queue)
     try:
         await ws.send_json(session.snapshot())
+        for message in session.vehicle_snapshots():
+            await ws.send_json(message)
         if session.ended:
             return
         while True:

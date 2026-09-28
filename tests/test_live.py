@@ -104,6 +104,11 @@ def test_f1_stream_keeps_cars_apart_takes_laps_and_records_a_full_replay(tmp_pat
                            "compound": "MEDIUM"}, {"driver": "ZZZ", "lap": 1}]})
     session = live.get(s["code"])
     assert set(session.vehicles) == {"AAA", "BBB"}            # ZZZ isn't in the field
+    # A viewer joining now gets the session, then each car's data in its own message
+    with client.websocket_connect(f"/live/sessions/{s['code']}/watch") as watcher:
+        assert watcher.receive_json()["type"] == "snapshot"
+        parts = {m["id"]: m["columns"]["time"] for m in (watcher.receive_json(), watcher.receive_json())}
+    assert parts == {"AAA": [0, 0.25], "BBB": [0, 0.25]}
     assert list(session.vehicles["AAA"]["time"]) == [0, 0.25]
     assert list(session.laps) == [("AAA", 1)]
     assert session.snapshot()["laps"][0]["compound"] == "MEDIUM"

@@ -4,18 +4,31 @@ then stream samples, events and laps in real time over UDP or a WebSocket."""
 import json
 import socket
 import time
+import sys
+import urllib.error
 import urllib.request
 from contextlib import ExitStack
 
 MAX_PACKET = 1200  # bytes: fits in one datagram on any network without fragmenting
 
 
+class LiveRefused(Exception):
+    """The platform turned the session down; the message is its reason."""
+
+
 def register(site: str, domain: str, meta: dict) -> dict:
     """Start a live session; returns its code (for viewers) and key (for packets)."""
     req = urllib.request.Request(f"{site}/live/sessions", data=json.dumps({"domain": domain, "meta": meta}).encode(),
                                  headers={"content-type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as err:
+        try:
+            reason = json.loads(err.read())["detail"]
+        except (ValueError, KeyError):
+            reason = err.reason
+        raise LiveRefused(f"{site} refused the session ({err.code}): {reason}") from None
 
 
 def packets(session: dict, samples: list[dict], events: list[dict], laps: list[dict], seq: int):
@@ -86,8 +99,15 @@ def stream(site: str, domain: str, meta: dict, samples: list[dict], events: list
 
     Samples go out when their `time` comes up, events at their `time`, laps at their `lap_end`.
     """
-    session = register(site, domain, meta)
+    try:
+        session = register(site, domain, meta)
+    except LiveRefused as err:
+        sys.exit(str(err))
     print(f"Live session {session['code']}: watch at {site}/?live={session['code']}")
+    limit = session.get("max_samples")
+    if limit and len(samples) > limit:
+        print(f"warning: the server keeps {limit:,} samples per session; the last "
+              f"{len(samples) - limit:,} of {len(samples):,} won't be kept (stream a shorter slice)")
     out = sender(site, udp, websocket)
     samples = sorted(samples, key=lambda s: s["time"])
     events = sorted(events, key=lambda e: e["time"])
