@@ -28,7 +28,59 @@ export interface F1Meta {
   track_outline: [number, number, number][];
 }
 
-export type ReplayMeta = F1Meta;
+export interface RocketGeometry {
+  name: string;
+  length: number;   // m
+  diameter: number; // m
+  cg: number;       // m from the nose tip, at launch
+  nose: { shape: string; length: number; diameter: number; shape_parameter: number; position: number };
+  body_tubes: { length: number; diameter: number; position: number }[];
+  fins: {
+    count: number; root_chord: number; tip_chord: number; span: number;
+    sweep: number; thickness: number; position: number;
+  }[];
+  motor: {
+    designation: string; manufacturer: string; diameter: number; length: number;
+    total_impulse: number; burn_time: number; max_thrust: number; aft_position: number;
+  };
+  recovery: { name: string; diameter: number; cd: number; deploy: string }[];
+}
+
+export interface FlightEvent {
+  name: string; // ignition, liftoff, rail_exit, burnout, apogee, ejection, deploy:<device>, landing
+  time: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface FlightSummary {
+  apogee: number;
+  apogee_time: number | null;
+  max_speed: number;
+  max_mach: number;
+  max_acceleration: number;
+  max_q: number;
+  max_q_time: number;
+  flight_time: number;
+  landing: [number, number];
+  rail_exit_speed: number;
+}
+
+export interface RocketMeta {
+  domain: 'rocket';
+  session: SessionInfo;
+  time_range: { start: number; end: number };
+  rocket: RocketGeometry;
+  launch: {
+    rail_length: number; angle: number; heading: number; wind_speed: number; wind_from: number;
+    site_name: string; site_altitude: number;
+  };
+  events: FlightEvent[];
+  summary: FlightSummary;
+}
+
+export type ReplayMeta = F1Meta | RocketMeta;
 
 /** One vehicle's columns, as the backend sends them: `time` plus any domain's channels. */
 export type Series = { time: number[] } & Record<string, (number | boolean | null)[]>;

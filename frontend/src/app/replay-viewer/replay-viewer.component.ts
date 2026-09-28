@@ -11,8 +11,10 @@ import { PlaybackClock } from '../replay/playback-clock';
 import { ViewerEngine } from '../engine/viewer-engine';
 import { SceneModule } from '../engine/scene-module';
 import { F1Scene } from '../f1/f1-scene';
+import { RocketScene } from '../rocket/rocket-scene';
 import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
+import { RocketPanelsComponent } from '../rocket-panels/rocket-panels.component';
 
 /**
  * The 3D viewer shell shared by every domain: engine, playback clock and controls.
@@ -22,7 +24,7 @@ import { DashboardComponent } from '../dashboard/dashboard.component';
 @Component({
   selector: 'app-replay-viewer',
   standalone: true,
-  imports: [LeaderboardComponent, DashboardComponent],
+  imports: [LeaderboardComponent, DashboardComponent, RocketPanelsComponent],
   templateUrl: './replay-viewer.component.html',
   styleUrl: './replay-viewer.component.scss',
 })
@@ -45,6 +47,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   protected f1 = computed(() => {
     const m = this.module();
     return m instanceof F1Scene ? m : null;
+  });
+  protected rocket = computed(() => {
+    const m = this.module();
+    return m instanceof RocketScene ? m : null;
   });
 
   // UI state (read by the template)
@@ -82,10 +88,8 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   // ---------- loading and switching sessions ----------
 
   private createModule(source: ReplaySource, meta: ReplayMeta): SceneModule {
-    switch (meta.domain ?? 'f1') {
-      case 'f1':
-        return new F1Scene(this.engine, source, this.api, meta);
-    }
+    if (meta.domain === 'rocket') return new RocketScene(this.engine, source, meta);
+    return new F1Scene(this.engine, source, this.api, meta);
   }
 
   private loadReplay(id: string | null): void {
@@ -145,6 +149,12 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     const value = Number((event.target as HTMLInputElement).value);
     this.clock.seek(value);
     this.currentTime.set(value);
+  }
+
+  protected seekTo(t: number): void {
+    if (!this.clock) return;
+    this.clock.seek(t);
+    this.currentTime.set(this.clock.time);
   }
 
   protected setSpeed(s: number): void {

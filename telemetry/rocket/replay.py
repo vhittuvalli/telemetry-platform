@@ -61,6 +61,7 @@ def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: dateti
             "name": rocket.name,
             "length": round(rocket.length, 4),
             "diameter": round(rocket.diameter, 4),
+            "cg": round(rocket.mass_properties(0)[1], 4),  # the point the flight's position tracks
             "nose": asdict(rocket.nose),
             "body_tubes": [asdict(b) for b in rocket.body_tubes],
             "fins": [asdict(f) for f in rocket.fins],
@@ -68,6 +69,7 @@ def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: dateti
                 "designation": motor.designation, "manufacturer": motor.manufacturer,
                 "diameter": motor.diameter, "length": motor.length,
                 "total_impulse": round(motor.total_impulse, 2), "burn_time": round(motor.burn_time, 3),
+                "max_thrust": round(max(motor.thrusts), 2),
                 "aft_position": rocket.motor_aft,
             },
             "recovery": [asdict(r) for r in rocket.recovery],

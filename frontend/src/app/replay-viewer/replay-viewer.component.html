@@ -14,6 +14,9 @@
       <app-dashboard [state]="state" [row]="f1.selectedRow()" />
     }
   }
+  @if (rocket(); as r) {
+    <app-rocket-panels [scene]="r" (seek)="seekTo($event)" />
+  }
 
   <div class="controls">
     <button class="play" (click)="togglePlay()">

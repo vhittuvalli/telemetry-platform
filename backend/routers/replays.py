@@ -20,19 +20,20 @@ _data_slots = threading.BoundedSemaphore(DATA_CONCURRENCY)
 
 
 @lru_cache(maxsize=REPLAY_CACHE_SIZE)
-def _load(replay_id: str) -> pd.DataFrame:
-    path = REPLAYS_DIR / f"{replay_id}.parquet"
-    #check if replay exists
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Replay '{replay_id}' not found")
+def _load(path, mtime: float) -> pd.DataFrame:
     return load_replay(path)
 
 
 def get_replay(replay_id: str) -> pd.DataFrame:
     """Load a replay once and keep it in memory. (utilize LRU cache)"""
+    path = REPLAYS_DIR / f"{replay_id}.parquet"
+    #check if replay exists
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Replay '{replay_id}' not found")
+    #keyed on the file's modification time, so a rebuilt replay is picked up
     #lru_cache doesn't stop parallel misses from each loading the same file
     with _load_lock:
-        return _load(replay_id)
+        return _load(path, path.stat().st_mtime)
 
 
 def column_to_list(series: pd.Series) -> list:
@@ -104,10 +105,15 @@ def replay_file(replay_id: str, suffix: str):
     return path
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=32)
+def _read_json(path, mtime: float):
+    return json.loads(path.read_text())
+
+
 def read_json(replay_id: str, suffix: str):
-    """Load a replay's JSON file once and keep it in memory."""
-    return json.loads(replay_file(replay_id, suffix).read_text())
+    """Load a replay's JSON file once and keep it in memory (until the file changes)."""
+    path = replay_file(replay_id, suffix)
+    return _read_json(path, path.stat().st_mtime)
 
 
 @router.get("/{replay_id}/meta")
