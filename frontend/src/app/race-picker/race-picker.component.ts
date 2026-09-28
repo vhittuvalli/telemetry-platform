@@ -1,11 +1,11 @@
 import { Component, OnDestroy, OnInit, inject, input, output, signal } from '@angular/core';
-import { Subscription, filter, switchMap, takeWhile, tap, timer } from 'rxjs';
+import { Subscription, switchMap, takeWhile, timer } from 'rxjs';
 import { ReplayApiService } from '../replay/replay-api.service';
 import {
   BuildJob, CatalogEvent, CatalogSession, ReplaySummary,
 } from '../replay/replay.models';
 
-type SessionView = CatalogSession['status'] | 'failed';
+type SessionView = CatalogSession['status'] | 'failed' | 'unbuilt';
 
 @Component({
   selector: 'app-race-picker',
@@ -35,12 +35,11 @@ export class RacePickerComponent implements OnInit, OnDestroy {
   private watching = new Set<string>(); // build ids being polled
 
   ngOnInit(): void {
-    // The FastF1 catalog is only useful when this server can build replays
-    this.subs.add(this.api.getBuildConfig().pipe(
-      filter((config) => config.enabled),
-      tap(() => this.buildsEnabled.set(true)),
-      switchMap(() => this.api.getSeasons()),
-    ).subscribe({
+    // The catalog is always browsable; whether unbuilt sessions can be built depends on the server
+    this.subs.add(this.api.getBuildConfig().subscribe({
+      next: (config) => this.buildsEnabled.set(config.enabled),
+    }));
+    this.subs.add(this.api.getSeasons().subscribe({
       next: (years) => {
         this.seasons.set(years);
         this.loadSeason(years[0]);
@@ -86,6 +85,7 @@ export class RacePickerComponent implements OnInit, OnDestroy {
     const job = this.jobs().get(s.replay_id);
     if (job?.status === 'queued' || job?.status === 'running') return 'building';
     if (job?.status === 'failed' && s.status !== 'built') return 'failed';
+    if (s.status === 'available' && !this.buildsEnabled()) return 'unbuilt'; // this server can't build it
     return s.status;
   }
 
