@@ -29,6 +29,7 @@ export interface F1Meta {
 }
 
 export interface RocketGeometry {
+  id: string | null; // the design in rockets/ it was flown from
   name: string;
   length: number;   // m
   diameter: number; // m
@@ -79,6 +80,7 @@ export interface RocketMeta {
   events: FlightEvent[];
   summary: FlightSummary;
   dispersion?: DispersionSummary; // present when Monte Carlo runs were made for this flight
+  custom?: SimulationRequest;     // present for flights simulated on request
 }
 
 export interface LandingZone {
@@ -181,4 +183,37 @@ export interface BuildJob {
   session: string;
   status: 'queued' | 'running' | 'done' | 'failed';
   message: string;
+}
+
+export interface MotorSummary {
+  file: string;
+  designation: string;
+  manufacturer: string;
+  diameter: number; // mm
+  total_impulse: number; // N·s
+  burn_time: number; // s
+  max_thrust: number; // N
+  delays: number[]; // s
+}
+
+export interface RocketSummary {
+  id: string;
+  name: string;
+  length: number;
+  diameter: number;
+  motor: MotorSummary;
+  ejection_delay: number | null;
+  uses_ejection: boolean;
+  launch: { wind_speed: number; wind_from: number; angle: number; heading: number };
+}
+
+export interface SimulationRequest {
+  rocket: string;
+  motor: string | null;
+  ejection_delay: number | null;
+  wind_speed: number;
+  wind_from: number;
+  angle: number;
+  heading: number;
+  monte_carlo: number;
 }

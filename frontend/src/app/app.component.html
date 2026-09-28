@@ -1,4 +1,8 @@
-<app-replay-viewer [replayId]="replayId()" />
+<app-replay-viewer
+  [replayId]="replayId()"
+  (loaded)="loadedSession.set($event)"
+  (relaunch)="openLaunch($event)"
+/>
 
 <button class="race" (click)="openPicker()" title="Choose another session">
   @if (current(); as r) {
@@ -18,4 +22,8 @@
     (close)="pickerOpen.set(false)"
     (built)="refreshReplays()"
   />
+}
+
+@if (launchOpen()) {
+  <app-launch-dialog [from]="launchFrom()" (launched)="choose($event)" (close)="launchOpen.set(false)" />
 }

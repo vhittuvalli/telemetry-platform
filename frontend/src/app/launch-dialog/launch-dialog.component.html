@@ -1,0 +1,75 @@
+<div class="backdrop" (click)="close.emit()"></div>
+
+<form class="panel" role="dialog" aria-label="Simulate a launch" (submit)="$event.preventDefault(); launch()">
+  <div class="head">
+    <h2>Simulate a launch</h2>
+    <button type="button" class="close" (click)="close.emit()" aria-label="Close">✕</button>
+  </div>
+
+  <label class="field">
+    <span>Rocket</span>
+    <select [value]="form().rocket" (change)="chooseRocket(valueFrom($event))">
+      @for (r of rockets(); track r.id) {
+        <option [value]="r.id" [selected]="r.id === form().rocket">{{ r.name }} · {{ r.length }} m, {{ r.motor.diameter }} mm mount</option>
+      }
+    </select>
+  </label>
+
+  <label class="field">
+    <span>Motor</span>
+    <select [value]="form().motor" (change)="chooseMotor(valueFrom($event))">
+      @for (m of fitting(); track m.file) {
+        <option [value]="m.file" [selected]="m.file === form().motor">{{ motorLabel(m) }}</option>
+      }
+    </select>
+  </label>
+
+  @if (rocket()?.uses_ejection) {
+    <label class="field">
+      <span>Ejection delay</span>
+      <select (change)="set('ejection_delay', numberFrom($event))">
+        @for (d of delays(); track d) {
+          <option [value]="d" [selected]="d === form().ejection_delay">{{ d === 0 ? 'None (fires at burnout)' : d + ' s after burnout' }}</option>
+        }
+      </select>
+    </label>
+  }
+
+  <div class="grid">
+    <label class="field">
+      <span>Wind <strong>{{ form().wind_speed }} m/s</strong></span>
+      <input type="range" min="0" max="15" step="0.5" [value]="form().wind_speed" (input)="set('wind_speed', numberFrom($event))" />
+    </label>
+    <label class="field">
+      <span>Wind from <strong>{{ form().wind_from }}° {{ compass(form().wind_from) }}</strong></span>
+      <input type="range" min="0" max="355" step="5" [value]="form().wind_from" (input)="set('wind_from', numberFrom($event))" />
+    </label>
+    <label class="field">
+      <span>Rail angle <strong>{{ form().angle }}°</strong></span>
+      <input type="range" min="0" max="15" step="0.5" [value]="form().angle" (input)="set('angle', numberFrom($event))" />
+    </label>
+    <label class="field">
+      <span>Rail leans toward <strong>{{ form().heading }}° {{ compass(form().heading) }}</strong></span>
+      <input type="range" min="0" max="355" step="5" [value]="form().heading" [disabled]="form().angle === 0"
+             (input)="set('heading', numberFrom($event))" />
+    </label>
+  </div>
+
+  @if (monteCarloAllowed()) {
+    <label class="check">
+      <input type="checkbox" [checked]="form().monte_carlo > 0" (change)="set('monte_carlo', form().monte_carlo > 0 ? 0 : runs)" />
+      <span>Map the landing zone ({{ runs }} varied flights; can take up to a minute)</span>
+    </label>
+  }
+
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+
+  <div class="actions">
+    <button type="button" (click)="close.emit()">Cancel</button>
+    <button type="submit" class="primary" [disabled]="busy() || !form().rocket">
+      {{ busy() ? 'Simulating…' : 'Launch' }}
+    </button>
+  </div>
+</form>

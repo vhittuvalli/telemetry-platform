@@ -27,6 +27,7 @@ COPY pyproject.toml ./
 COPY telemetry/ telemetry/
 COPY backend/ backend/
 COPY scripts/ scripts/
+COPY rockets/ rockets/
 COPY --from=frontend /app/frontend/dist/frontend/browser/ frontend/
 
 # FastF1 cache and built replays live here; mount a volume to keep them across deploys

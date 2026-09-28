@@ -3,6 +3,7 @@ import os
 import threading
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
+from backend import simulations
 from telemetry.f1 import REPLAYS_DIR, load_replay
 import json
 
@@ -26,6 +27,9 @@ def _load(path, mtime: float) -> pd.DataFrame:
 
 def get_replay(replay_id: str) -> pd.DataFrame:
     """Load a replay once and keep it in memory. (utilize LRU cache)"""
+    simulated = simulations.get(replay_id)
+    if simulated:
+        return simulated["frame"]
     path = REPLAYS_DIR / f"{replay_id}.parquet"
     #check if replay exists
     if not path.exists():
@@ -112,6 +116,12 @@ def _read_json(path, mtime: float):
 
 def read_json(replay_id: str, suffix: str):
     """Load a replay's JSON file once and keep it in memory (until the file changes)."""
+    simulated = simulations.get(replay_id)
+    if simulated:
+        value = {".meta.json": simulated["meta"], ".dispersion.json": simulated["dispersion"]}.get(suffix)
+        if value is None:
+            raise HTTPException(status_code=404, detail=f"No {suffix} for flight '{replay_id}'")
+        return value
     path = replay_file(replay_id, suffix)
     return _read_json(path, path.stat().st_mtime)
 

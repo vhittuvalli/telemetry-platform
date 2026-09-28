@@ -1,0 +1,222 @@
+{
+  "domain": "rocket",
+  "session": {
+    "year": 2026,
+    "event": "Chute release",
+    "location": "Launch site",
+    "name": "G40W flight",
+    "date": "2026-09-28T00:49:05"
+  },
+  "time_range": {
+    "start": 0.0,
+    "end": 51.529
+  },
+  "rocket": {
+    "id": "chute_release",
+    "name": "Chute release",
+    "length": 1.0351,
+    "diameter": 0.0635,
+    "cg": 0.4881,
+    "nose": {
+      "shape": "ogive",
+      "length": 0.24764999999999998,
+      "diameter": 0.0635,
+      "shape_parameter": 1.0,
+      "position": 0.0
+    },
+    "body_tubes": [
+      {
+        "length": 0.3937,
+        "diameter": 0.0635,
+        "position": 0.24765
+      },
+      {
+        "length": 0.3937,
+        "diameter": 0.0635,
+        "position": 0.64135
+      }
+    ],
+    "fins": [
+      {
+        "count": 3,
+        "root_chord": 0.13419328,
+        "tip_chord": 0.13419328,
+        "span": 0.07924799999999999,
+        "sweep": 0.06709664,
+        "thickness": 0.004762499999999999,
+        "position": 0.9008567199999999,
+        "cross_section": "rounded"
+      }
+    ],
+    "motor": {
+      "designation": "G40W",
+      "manufacturer": "AeroTech",
+      "diameter": 0.029,
+      "length": 0.124,
+      "total_impulse": 99.02,
+      "burn_time": 2.3,
+      "max_thrust": 74.33,
+      "aft_position": 1.04458,
+      "ejection_delay": 7.0
+    },
+    "recovery": [
+      {
+        "name": "Reefed Parachute",
+        "diameter": 0.254,
+        "cd": 1.55,
+        "deploy": "ejection",
+        "deploy_altitude": null,
+        "deploy_delay": 0.0
+      },
+      {
+        "name": "Opened Elliptical Parachute [Cd 1.55 (3.1 oz) 15.9 in^3]",
+        "diameter": 0.7111999999999998,
+        "cd": 1.55,
+        "deploy": "altitude",
+        "deploy_altitude": 152.4,
+        "deploy_delay": 0.0
+      }
+    ]
+  },
+  "launch": {
+    "rail_length": 3.048,
+    "angle": 0.0,
+    "heading": 90.0,
+    "wind_speed": 3.0,
+    "wind_from": 300.0,
+    "site_name": "Launch site",
+    "site_altitude": 0.0,
+    "temperature": 288.15,
+    "pressure": 101325.0
+  },
+  "events": [
+    {
+      "name": "ignition",
+      "time": 0.0,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    {
+      "name": "liftoff",
+      "time": 0.005,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    {
+      "name": "rail_exit",
+      "time": 0.345,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 3.07
+    },
+    {
+      "name": "burnout",
+      "time": 2.3,
+      "x": -9.28,
+      "y": 5.36,
+      "z": 111.43
+    },
+    {
+      "name": "apogee",
+      "time": 8.3728,
+      "x": -47.71,
+      "y": 27.55,
+      "z": 303.65
+    },
+    {
+      "name": "ejection",
+      "time": 9.3,
+      "x": -52.78,
+      "y": 30.47,
+      "z": 299.5
+    },
+    {
+      "name": "deploy:Reefed Parachute",
+      "time": 9.3,
+      "x": -52.78,
+      "y": 30.47,
+      "z": 299.5
+    },
+    {
+      "name": "deploy:Opened Elliptical Parachute [Cd 1.55 (3.1 oz) 15.9 in^3]",
+      "time": 20.0,
+      "x": -37.54,
+      "y": 21.68,
+      "z": 152.04
+    },
+    {
+      "name": "landing",
+      "time": 51.5287,
+      "x": 44.37,
+      "y": -25.62,
+      "z": 0.0
+    }
+  ],
+  "summary": {
+    "apogee": 303.65,
+    "apogee_time": 8.373,
+    "max_speed": 71.9,
+    "max_mach": 0.2128,
+    "max_acceleration": 76.97,
+    "max_q": 3177.9,
+    "max_q_time": 1.96,
+    "flight_time": 51.529,
+    "landing": [
+      44.37,
+      -25.62
+    ],
+    "rail_exit_speed": 17.98
+  },
+  "dispersion": {
+    "runs": 500,
+    "succeeded": 500,
+    "seed": 1,
+    "variation": {
+      "wind_speed": 0.25,
+      "wind_speed_min": 0.5,
+      "wind_direction": 15.0,
+      "thrust": 0.03,
+      "rail_angle": 1.0,
+      "drag": 0.05,
+      "mass": 0.02,
+      "parachute_cd": 0.07,
+      "ejection_delay": 0.1
+    },
+    "apogee": {
+      "mean": 304.59,
+      "sd": 17.13,
+      "p5": 276.96,
+      "p95": 336.02
+    },
+    "landing": {
+      "zones": [
+        {
+          "probability": 0.5,
+          "center": [
+            43.42,
+            -25.4
+          ],
+          "semi_major": 21.79,
+          "semi_minor": 18.95,
+          "angle": -38.7,
+          "observed": 0.538
+        },
+        {
+          "probability": 0.95,
+          "center": [
+            43.42,
+            -25.4
+          ],
+          "semi_major": 45.31,
+          "semi_minor": 39.39,
+          "angle": -38.7,
+          "observed": 0.938
+        }
+      ],
+      "max_distance": 111.88,
+      "p95_distance": 83.97
+    }
+  }
+}

@@ -4,7 +4,10 @@
     <div class="motor">{{ meta().rocket.motor.manufacturer }} {{ meta().rocket.motor.designation }}</div>
   </header>
 
-  <div class="phase">{{ scene().phase() }}</div>
+  <div class="row">
+    <div class="phase">{{ scene().phase() }}</div>
+    <button class="relaunch" (click)="relaunch.emit()">Change launch…</button>
+  </div>
 
   @if (state(); as s) {
     <div class="hero">
@@ -43,6 +46,12 @@
       </tr>
     }
   </table>
+  @if (meta().summary.max_mach > 0.8) {
+    <p class="warning">
+      This flight passes Mach {{ meta().summary.max_mach.toFixed(2) }}. The simulator's drag model is built
+      for subsonic flight, so treat results above Mach 0.8 as rough.
+    </p>
+  }
 
   @if (scene().dispersion(); as d) {
     <app-dispersion-panel [dispersion]="d" [nominalApogee]="meta().summary.apogee" />

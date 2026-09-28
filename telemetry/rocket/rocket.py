@@ -279,6 +279,11 @@ class Rocket:
         return -math.copysign(0.5 * density * rate * rate * (body + fins), rate)
 
 
+def _finite(value: float | None) -> float | None:
+    """OpenRocket marks a plugged motor (no ejection charge) with an infinite delay."""
+    return value if value is not None and math.isfinite(value) else None
+
+
 def load_rocket(path: str | Path) -> Rocket:
     """Load a rocket definition (see rockets/*.json). Motor files are relative to the definition."""
     path = Path(path)
@@ -293,7 +298,7 @@ def load_rocket(path: str | Path) -> Rocket:
         masses=[MassItem(**m) for m in spec["masses"]],
         motor=motor,
         motor_aft=motor_spec["aft_position"],
-        ejection_delay=motor_spec.get("ejection_delay"),
+        ejection_delay=_finite(motor_spec.get("ejection_delay")),
         recovery=[Recovery(**r) for r in spec.get("recovery", [])],
         launch_lugs=[LaunchLug(**lug) for lug in spec.get("launch_lugs", [])],
         roughness=spec.get("roughness", 60e-6),

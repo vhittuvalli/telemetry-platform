@@ -36,6 +36,27 @@ header {
   .motor { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
 }
 
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.relaunch {
+  margin-top: 4px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #333;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover, &:focus-visible { background: #444; }
+}
+
 .phase {
   display: inline-block;
   margin: 8px 0 4px;
@@ -108,6 +129,16 @@ h3 {
 
   th { color: var(--text-secondary); font-weight: 400; text-align: left; padding: 2px 0; }
   td { text-align: right; font-variant-numeric: tabular-nums; }
+}
+
+.warning {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-left: 3px solid #eda100;
+  background: rgba(237, 161, 0, 0.12);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .charts {

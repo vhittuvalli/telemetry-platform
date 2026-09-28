@@ -1,11 +1,11 @@
 import {
   AfterViewInit, Component, ElementRef, HostListener, NgZone, OnDestroy, ViewChild,
-  computed, effect, inject, input, signal, untracked,
+  computed, effect, inject, input, output, signal, untracked,
 } from '@angular/core';
 import * as THREE from 'three';
 import { Subscription, switchMap } from 'rxjs';
 import { ReplayApiService } from '../replay/replay-api.service';
-import { ReplayMeta } from '../replay/replay.models';
+import { ReplayMeta, RocketMeta, SessionInfo } from '../replay/replay.models';
 import { ReplaySource } from '../replay/replay-source';
 import { PlaybackClock } from '../replay/playback-clock';
 import { ViewerEngine } from '../engine/viewer-engine';
@@ -40,6 +40,9 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   // session
   private api = inject(ReplayApiService);
   replayId = input<string | null>(null);
+  /** The loaded session's details (for titles of sessions not in the replay list). */
+  loaded = output<SessionInfo | null>();
+  relaunch = output<RocketMeta>();
   private viewReady = signal(false);
   private loading = new Subscription();
   private clock?: PlaybackClock;
@@ -98,6 +101,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     const source = new ReplaySource(this.api, id);
     this.loading = source.meta().pipe(
       switchMap((meta) => {
+        this.loaded.emit(meta.session);
         const module = this.createModule(source, meta);
         this.module.set(module);
         return module.load();

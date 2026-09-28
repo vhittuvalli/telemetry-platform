@@ -17,6 +17,7 @@ const G = 9.80665;
 export class RocketPanelsComponent {
   scene = input.required<RocketScene>();
   seek = output<number>();
+  relaunch = output<void>();
 
   protected hoverTime = signal<number | null>(null);
   protected meta = computed(() => this.scene().meta);

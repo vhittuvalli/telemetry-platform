@@ -38,7 +38,8 @@ def flight_frame(flight: Flight) -> pd.DataFrame:
     return frame.round(5)
 
 
-def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: datetime | None = None) -> dict:
+def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: datetime | None = None,
+                    rocket_id: str | None = None, name: str | None = None) -> dict:
     when = when or datetime.now(timezone.utc)
     c = flight.columns
     events = []
@@ -53,11 +54,12 @@ def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: dateti
             "year": when.year,
             "event": rocket.name,
             "location": launch.site_name,
-            "name": f"{motor.designation} flight",
+            "name": name or f"{motor.designation} flight",
             "date": when.replace(microsecond=0, tzinfo=None).isoformat(),
         },
         "time_range": {"start": 0.0, "end": round(c["time"][-1], 3)},
         "rocket": {
+            "id": rocket_id,  # the definition in rockets/ it was flown from
             "name": rocket.name,
             "length": round(rocket.length, 4),
             "diameter": round(rocket.diameter, 4),
@@ -71,6 +73,7 @@ def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: dateti
                 "total_impulse": round(motor.total_impulse, 2), "burn_time": round(motor.burn_time, 3),
                 "max_thrust": round(max(motor.thrusts), 2),
                 "aft_position": rocket.motor_aft,
+                "ejection_delay": rocket.ejection_delay,
             },
             "recovery": [asdict(r) for r in rocket.recovery],
         },
@@ -81,10 +84,10 @@ def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: dateti
 
 
 def save_flight(rocket: Rocket, launch: Launch, flight: Flight, replays_dir: Path = REPLAYS_DIR,
-                dispersion: dict | None = None) -> str:
+                dispersion: dict | None = None, rocket_id: str | None = None) -> str:
     """Write the flight's replay files (and Monte Carlo results, if given); returns the replay id."""
     stem = replay_id(rocket)
-    meta = flight_metadata(rocket, launch, flight)
+    meta = flight_metadata(rocket, launch, flight, rocket_id=rocket_id)
     dispersion_path = replays_dir / f"{stem}.dispersion.json"
     if dispersion:
         save_metadata(dispersion, dispersion_path)

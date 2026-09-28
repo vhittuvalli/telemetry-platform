@@ -52,5 +52,5 @@ if __name__ == "__main__":
               f"{2 * zone['semi_major']:.0f} × {2 * zone['semi_minor']:.0f} m ellipse "
               f"({zone['observed']:.0%} of runs did)")
 
-    replay_id = save_flight(rocket, launch, flight, dispersion=spread)
+    replay_id = save_flight(rocket, launch, flight, dispersion=spread, rocket_id=args.rocket.stem)
     print(f"Saved replay '{replay_id}'")

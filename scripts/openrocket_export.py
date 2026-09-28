@@ -42,6 +42,44 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
 
 
+def write_eng(motor, delays: list[float]) -> str:
+    """Write an OpenRocket motor's thrust curve to rockets/motors as a RASP .eng file; returns its name."""
+    designation = str(motor.getDesignation())
+    maker = str(motor.getManufacturer()).split()[0]
+    prop = float(motor.getLaunchMass()) - float(motor.getBurnoutMass())
+    eng_name = f"{slug(maker)}_{slug(designation)}.eng"
+    delay_text = "-".join(f"{d:g}" for d in delays) or "0"
+    lines = [f"; {maker} {designation}, exported from OpenRocket's motor database",
+             f"{designation} {float(motor.getDiameter()) * 1000:g} {float(motor.getLength()) * 1000:g} "
+             f"{delay_text} {prop:.5f} {float(motor.getLaunchMass()):.5f} {maker}"]
+    for t, f in zip(motor.getTimePoints(), motor.getThrustPoints()):
+        if float(t) > 0:
+            lines.append(f"{float(t):.4f} {float(f):.4f}")
+    (ROCKETS_DIR / "motors").mkdir(parents=True, exist_ok=True)
+    (ROCKETS_DIR / "motors" / eng_name).write_text("\n".join(lines) + "\n")
+    return eng_name
+
+
+def export_motors(jar: Path, wanted: list[str]) -> None:
+    """Export motors named 'Maker:Designation:diameter_mm' from OpenRocket's database."""
+    import time
+    with orhelper.OpenRocketInstance(str(jar), log_level="ERROR"):
+        db = jpype.JClass("net.sf.openrocket.startup.Application").getThrustCurveMotorSetDatabase()
+        time.sleep(2)  # the database loads in the background
+        sets = list(db.getMotorSets())
+        for spec in wanted:
+            maker, designation, diameter = spec.split(":")
+            match = next((ms for ms in sets
+                          if str(ms.getManufacturer()).startswith(maker) and str(ms.getDesignation()) == designation
+                          and round(float(ms.getMotors()[0].getDiameter()) * 1000) == int(diameter)), None)
+            if match is None:
+                print(f"warning: no {maker} {designation} ({diameter} mm) in OpenRocket's database")
+                continue
+            motor = match.getMotors()[0]
+            delays = [float(d) for d in motor.getStandardDelays() if float(d) < 1e3]
+            print(f"Wrote rockets/motors/{write_eng(motor, delays)}")
+
+
 def export(ork: Path, jar: Path, sim_index: int) -> None:
     with orhelper.OpenRocketInstance(str(jar), log_level="ERROR") as instance:
         orh = orhelper.Helper(instance)
@@ -144,19 +182,7 @@ def export(ork: Path, jar: Path, sim_index: int) -> None:
 
         # Motor: write its thrust curve as a RASP .eng file
         instance_ = mount.getMotorConfig(config.getId())
-        motor = instance_.getMotor()
-        designation = str(motor.getDesignation())
-        maker = str(motor.getManufacturer()).split()[0]
-        prop = float(motor.getLaunchMass()) - float(motor.getBurnoutMass())
-        eng_name = f"{slug(maker)}_{slug(designation)}.eng"
-        lines = [f"; {maker} {designation}, exported from OpenRocket's motor database",
-                 f"{designation} {float(motor.getDiameter()) * 1000:g} {float(motor.getLength()) * 1000:g} "
-                 f"{float(instance_.getEjectionDelay()):g} {prop:.5f} {float(motor.getLaunchMass()):.5f} {maker}"]
-        for t, f in zip(motor.getTimePoints(), motor.getThrustPoints()):
-            if float(t) > 0:
-                lines.append(f"{float(t):.4f} {float(f):.4f}")
-        (ROCKETS_DIR / "motors").mkdir(parents=True, exist_ok=True)
-        (ROCKETS_DIR / "motors" / eng_name).write_text("\n".join(lines) + "\n")
+        eng_name = write_eng(instance_.getMotor(), [float(instance_.getEjectionDelay())])
         spec["motor"] = {
             "file": f"motors/{eng_name}",
             "aft_position": round(front(mount) + float(mount.getLength()) + float(mount.getMotorOverhang()), 5),
@@ -200,8 +226,13 @@ def export(ork: Path, jar: Path, sim_index: int) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("ork", type=Path)
+    parser.add_argument("ork", type=Path, nargs="?", help="OpenRocket design to export")
     parser.add_argument("--jar", type=Path, required=True, help="OpenRocket 23.09 jar")
     parser.add_argument("--sim", type=int, default=0, help="index of the simulation to use as the reference")
+    parser.add_argument("--motor", action="append", default=[], metavar="MAKER:DESIGNATION:MM",
+                        help="also export a motor from OpenRocket's database, e.g. Estes:C6:18")
     args = parser.parse_args()
-    export(args.ork, args.jar, args.sim)
+    if args.ork:
+        export(args.ork, args.jar, args.sim)
+    if args.motor:
+        export_motors(args.jar, args.motor)

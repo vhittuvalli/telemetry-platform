@@ -15,7 +15,7 @@
     }
   }
   @if (rocket(); as r) {
-    <app-rocket-panels [scene]="r" (seek)="seekTo($event)" />
+    <app-rocket-panels [scene]="r" (seek)="seekTo($event)" (relaunch)="relaunch.emit(r.meta)" />
   }
 
   <div class="controls">
