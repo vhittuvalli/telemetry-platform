@@ -114,10 +114,16 @@ sessions to watch before anything is built.
 **New → Blueprint**, pick this repo, and apply. Every push to `main` redeploys.
 
 The free plan has 512 MB of RAM, sleeps after 15 minutes idle (the next visit
-takes about a minute to wake it), and has no persistent disk. On-demand builds
-don't fit in that memory, so the blueprint sets `ALLOW_BUILDS=false` and the
-race picker only lists the seeded replays. To publish a new session, build it
-locally, copy its three files into `seed/replays/`, and push.
+takes about a minute to wake it), and has no persistent disk. What that means here:
+
+- **Race builds work** from the race picker. A build peaks around 480 MB, just
+  under the limit, and gives its memory back when it finishes. The free plan's
+  CPU is slow, so a race takes several minutes to build.
+- **Built races don't last.** Anything built on the server is lost when it
+  restarts, redeploys or wakes from sleep. To keep a race, build it locally,
+  copy its three files into `seed/replays/`, and push; it's then part of the image.
+- **Monte Carlo runs on request are off** (`ALLOW_MONTE_CARLO=false`); they need
+  more memory. Flights with landing zones built locally with `--monte-carlo` still show them.
 
 ### Anywhere else
 

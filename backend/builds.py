@@ -1,5 +1,7 @@
 """Background replay builds. Jobs live in memory, so they reset when the server restarts."""
 
+import ctypes
+import gc
 import threading
 import traceback
 import uuid
@@ -29,6 +31,17 @@ def _run(job_id, year, round_number, session_code):
     except Exception as err:
         traceback.print_exc()
         _update(job_id, status="failed", message=str(err) or type(err).__name__)
+    finally:
+        release_memory()
+
+
+def release_memory():
+    """Hand memory a build used back to the OS; small hosts can't keep a build's peak around."""
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except OSError:
+        pass  # not glibc (e.g. macOS): nothing to trim
 
 
 def start_build(year: int, round_number: int, session_code: str, replay_id: str) -> dict:

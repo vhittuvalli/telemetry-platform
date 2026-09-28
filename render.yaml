@@ -7,8 +7,12 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      # 512 MB on the free plan isn't enough to build replays; serve the ones baked into the image
+      # A race build peaks around 480 MB and fits in the free plan's 512 MB; memory is
+      # released afterwards. Built races are lost on restart (no persistent disk on free).
       - key: ALLOW_BUILDS
+        value: "true"
+      # Monte Carlo starts a process per CPU, far more memory than 512 MB allows
+      - key: ALLOW_MONTE_CARLO
         value: "false"
       - key: REPLAY_CACHE_SIZE
         value: "2"
