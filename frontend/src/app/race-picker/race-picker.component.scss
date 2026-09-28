@@ -112,6 +112,7 @@ button, select {
 .building { border-color: #ffd12e !important; }
 .available { border-color: #666 !important; }
 .upcoming { opacity: 0.4; }
+.unbuilt { border-color: #444 !important; border-style: dashed !important; color: #888; }
 .failed { border-color: #ff6b6b !important; }
 
 .spinner {

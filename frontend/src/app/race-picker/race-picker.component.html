@@ -17,64 +17,68 @@
     </div>
   }
 
+  <div class="browse">
+    <h3>All sessions from FastF1</h3>
+    <select [value]="year()" (change)="onYearChange($event)" aria-label="Season">
+      @for (y of seasons(); track y) {
+        <option [value]="y" [selected]="y === year()">{{ y }}</option>
+      }
+    </select>
+  </div>
   @if (buildsEnabled()) {
-    <div class="browse">
-      <h3>All sessions from FastF1</h3>
-      <select [value]="year()" (change)="onYearChange($event)" aria-label="Season">
-        @for (y of seasons(); track y) {
-          <option [value]="y" [selected]="y === year()">{{ y }}</option>
-        }
-      </select>
-    </div>
     <p class="hint">Sessions not built yet are downloaded and processed on the server. This takes a few minutes.</p>
+  } @else {
+    <p class="hint">This server only plays sessions that are already built (▶). Build others by running the app locally.</p>
+  }
 
-    @if (error(); as message) {
-      <p class="error">{{ message }}</p>
-    }
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
 
-    <div class="events">
-      @if (events(); as list) {
-        @for (e of list; track e.round) {
-          <div class="event" [class.future]="!hasPastSessions(e)">
-            <div class="info">
-              <span class="round">R{{ e.round }}</span>
-              <span class="name">{{ e.name }}</span>
-              <span class="where">{{ e.location }} · {{ e.date }}</span>
-            </div>
-            <div class="sessions">
-              @for (s of e.sessions; track s.code) {
-                @let view = sessionView(s);
-                <button
-                  [class]="view"
-                  [class.active]="s.replay_id === current()"
-                  [disabled]="view === 'upcoming' || view === 'building'"
-                  [title]="view === 'building' ? jobMessage(s) : view === 'available' ? 'Build this session' : view === 'failed' ? 'Build failed. Click to retry' : s.name"
-                  (click)="onSession(e, s)"
-                >
-                  {{ s.code }}
-                  @if (view === 'built') { <span>▶</span> }
-                  @if (view === 'building') { <span class="spinner"></span> }
-                </button>
-              }
-            </div>
-            @for (job of failures(e); track job.id) {
-              <p class="error">{{ job.session }} failed: {{ job.message }}</p>
+  <div class="events">
+    @if (events(); as list) {
+      @for (e of list; track e.round) {
+        <div class="event" [class.future]="!hasPastSessions(e)">
+          <div class="info">
+            <span class="round">R{{ e.round }}</span>
+            <span class="name">{{ e.name }}</span>
+            <span class="where">{{ e.location }} · {{ e.date }}</span>
+          </div>
+          <div class="sessions">
+            @for (s of e.sessions; track s.code) {
+              @let view = sessionView(s);
+              <button
+                [class]="view"
+                [class.active]="s.replay_id === current()"
+                [disabled]="view === 'upcoming' || view === 'building' || view === 'unbuilt'"
+                [title]="view === 'building' ? jobMessage(s) : view === 'available' ? 'Build this session' : view === 'failed' ? 'Build failed. Click to retry' : view === 'unbuilt' ? s.name + ' · not built on this server' : s.name"
+                (click)="onSession(e, s)"
+              >
+                {{ s.code }}
+                @if (view === 'built') { <span>▶</span> }
+                @if (view === 'building') { <span class="spinner"></span> }
+              </button>
             }
           </div>
-        } @empty {
-          <p class="hint">FastF1 has no events with telemetry for this season.</p>
-        }
-      } @else if (!error()) {
-        <p class="hint">Loading schedule…</p>
+          @for (job of failures(e); track job.id) {
+            <p class="error">{{ job.session }} failed: {{ job.message }}</p>
+          }
+        </div>
+      } @empty {
+        <p class="hint">FastF1 has no events with telemetry for this season.</p>
       }
-    </div>
+    } @else if (!error()) {
+      <p class="hint">Loading schedule…</p>
+    }
+  </div>
 
-    <div class="legend">
-      <span><i class="built"></i>ready</span>
+  <div class="legend">
+    <span><i class="built"></i>ready</span>
+    @if (buildsEnabled()) {
       <span><i class="available"></i>click to build</span>
-      <span><i class="upcoming"></i>not available yet</span>
-    </div>
-  } @else if (error()) {
-    <p class="error">{{ error() }}</p>
-  }
+    } @else {
+      <span><i class="unbuilt"></i>not built on this server</span>
+    }
+    <span><i class="upcoming"></i>not available yet</span>
+  </div>
 </div>
