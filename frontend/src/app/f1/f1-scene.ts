@@ -147,6 +147,12 @@ export class F1Scene implements SceneModule {
     this.lapIndex.set(lapIndex);
     this.totalLaps.set(laps.reduce((most, l) => Math.max(most, l.lap), 0));
     for (const [id, series] of vehicles) {
+      const existing = this.tracks.get(id);
+      if (existing) {
+        // Only what's new: rebuilding every car's whole track several times a second stalls the page
+        existing.extend(series as unknown as VehicleSeries, firstAfter(series.time, existing.lastTime));
+        continue;
+      }
       // Finalizing cleans and smooths the data in place, so work on a copy: more keeps arriving
       const copy = Object.fromEntries(Object.entries(series).map(([k, v]) => [k, v.slice()])) as unknown as VehicleSeries;
       const track = new VehicleTrack(id, copy);
@@ -424,4 +430,16 @@ export class F1Scene implements SceneModule {
   dispose(): void {
     this.engine.clear();
   }
+}
+
+/** Index of the first time after t (binary search). */
+function firstAfter(times: number[], t: number): number {
+  let lo = 0;
+  let hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid] <= t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }

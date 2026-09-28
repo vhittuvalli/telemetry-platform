@@ -17,8 +17,8 @@ import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { RocketPanelsComponent } from '../rocket-panels/rocket-panels.component';
 
-/** Seconds a live view stays behind the newest data, so gaps between batches don't show. */
-const LIVE_DELAY_S = 0.6;
+/** Real seconds a live view stays behind the newest data, so gaps between batches don't show. */
+const LIVE_DELAY_S = 0.8;
 
 /**
  * The 3D viewer shell shared by every domain: engine, playback clock and controls.
@@ -70,6 +70,8 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   protected following = signal(false); // playing at the live edge
   private liveEdge = 0;
   private liveEdgeAt = 0;
+  private liveRate = 1; // session seconds per real second: 1 when streamed in real time, 10 at 10x
+  private liveHistory: { at: number; edge: number }[] = [];
   protected readonly speeds = [1, 2, 5, 10, 20];
   private lastUiUpdate = 0;
 
@@ -120,9 +122,16 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
       next: ({ start, end, openAt, live }) => {
         this.timeRange.set({ start, end });
         if (live) {
-          // Where the stream has got to, and when we heard: the live edge moves on in real time from there
+          // Where the stream has got to, when we heard, and how fast it's moving (it may be sped up)
+          const now = performance.now();
+          this.liveHistory = [...this.liveHistory.filter((h) => now - h.at < 4000), { at: now, edge: end }];
+          const oldest = this.liveHistory[0];
+          if (now - oldest.at > 1000) {
+            const measured = (end - oldest.edge) / ((now - oldest.at) / 1000);
+            this.liveRate = Math.min(200, Math.max(0.2, 0.7 * this.liveRate + 0.3 * measured));
+          }
           this.liveEdge = end;
-          this.liveEdgeAt = performance.now();
+          this.liveEdgeAt = now;
         }
         if (this.clock) {
           this.clock.end = end; // a live flight grew
@@ -151,6 +160,8 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.clock = undefined;
     this.liveSource.set(null);
     this.following.set(false);
+    this.liveRate = 1;
+    this.liveHistory = [];
 
     this.currentTime.set(0);
     this.playing.set(false);
@@ -234,9 +245,14 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
 
     if (this.clock && module) {
       if (this.following() && !this.liveSource()?.ended()) {
-        // Stay just behind the live edge, advancing smoothly between batches of data
-        const edge = this.liveEdge + (performance.now() - this.liveEdgeAt) / 1000;
-        this.clock.time = Math.max(this.clock.start, Math.min(this.clock.end, edge - LIVE_DELAY_S));
+        // Play at the stream's own rate a little behind its edge, easing toward that target
+        // rather than jumping to it, so batches arriving in bursts don't show as stutter
+        const rate = this.liveRate;
+        const target = this.liveEdge + rate * ((performance.now() - this.liveEdgeAt) / 1000 - LIVE_DELAY_S);
+        let t = this.clock.time + rate * dt;
+        t += (target - t) * Math.min(1, 1.5 * dt);
+        if (Math.abs(target - t) > 5 * rate) t = target; // far off (just joined, or a long stall): snap
+        this.clock.time = Math.max(this.clock.start, Math.min(this.clock.end, t));
       } else {
         this.clock.tick(dt);
       }

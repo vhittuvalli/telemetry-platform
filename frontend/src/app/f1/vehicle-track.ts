@@ -52,15 +52,66 @@ export class VehicleTrack {
   private sz: number[] = [];
   private headings: number[] = []; // per sample, carried through stops
 
+  private radius = 2;
+
   constructor(public readonly id: string, public readonly data: VehicleSeries) {}
+
+  get lastTime(): number {
+    const t = this.data.time;
+    return t.length ? t[t.length - 1] : -Infinity;
+  }
 
   /** Call once before use: drop bad samples, precompute smoothed positions. */
   finalize(radius = 2): void {
+    this.radius = radius;
     this.dropMissingPositions();
     this.sx = smooth(this.data.x, radius);
     this.sy = smooth(this.data.y, radius);
     this.sz = smooth(this.data.z, radius);
     this.headings = this.computeHeadings();
+  }
+
+  /**
+   * Add later samples (live sessions) without redoing the whole track: only the points
+   * whose smoothing window or heading reaches the new samples are recomputed.
+   */
+  extend(more: VehicleSeries, from = 0): void {
+    const d = this.data;
+    const oldN = d.time.length;
+    const lastT = this.lastTime;
+    const keys = Object.keys(d) as (keyof VehicleSeries)[];
+    for (let i = from; i < more.time.length; i++) {
+      if (more.time[i] <= lastT || (more.x[i] === 0 && more.y[i] === 0)) continue;
+      for (const key of keys) (d[key] as unknown[]).push(more[key][i]);
+    }
+    const n = d.time.length;
+    if (n === oldN) return;
+
+    const r = this.radius;
+    for (let i = Math.max(0, oldN - r); i < n; i++) {
+      const lo = Math.max(0, i - r);
+      const hi = Math.min(n - 1, i + r);
+      let x = 0, y = 0, z = 0;
+      for (let j = lo; j <= hi; j++) {
+        x += d.x[j];
+        y += d.y[j];
+        z += d.z[j];
+      }
+      const k = hi - lo + 1;
+      this.sx[i] = x / k;
+      this.sy[i] = y / k;
+      this.sz[i] = z / k;
+    }
+    const h0 = Math.max(0, oldN - r - 1);
+    let last = h0 > 0 ? this.headings[h0 - 1] : NaN;
+    for (let i = h0; i < n; i++) {
+      const a = Math.max(i - 1, 0);
+      const b = Math.min(i + 1, n - 1);
+      const dx = this.sx[b] - this.sx[a];
+      const dy = this.sy[b] - this.sy[a];
+      if (dx * dx + dy * dy > 0.01) last = Math.atan2(dy, dx);
+      this.headings[i] = Number.isNaN(last) ? (this.headings[0] ?? 0) : last;
+    }
   }
 
   /** FastF1 reports (0, 0, 0) while a car has no position fix (e.g. before it leaves the garage). */
