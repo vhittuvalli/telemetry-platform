@@ -5,8 +5,8 @@ kinds of sessions on one engine: real Formula 1 races, and rocket flights from a
 built-in flight simulator.
 
 > **Status:** active development. F1 replays, the rocket simulator, the 3D viewer
-> for both, Monte Carlo landing zones and live rocket telemetry (UDP or WebSocket)
-> work today. Live F1 sessions are planned.
+> for both, Monte Carlo landing zones and live telemetry for both (UDP or WebSocket)
+> work today.
 
 ## Features
 
@@ -213,8 +213,15 @@ python scripts/stream_rocket.py rockets/chute_release.json --site https://teleme
 # or skip UDP and send straight over a WebSocket
 python scripts/stream_rocket.py rockets/chute_release.json --site https://telemetry-platform.onrender.com --websocket
 
+# another motor, wind and rail angle
+python scripts/stream_rocket.py rockets/chute_release.json --motor aerotech_g80t.eng --wind 6 --wind-from 270
+
 # re-stream a saved flight
 python scripts/stream_rocket.py --replay data/replays/rocket_chute_release_g40w
+
+# an F1 race, every car live with the leaderboard, 10x faster than real time
+python scripts/stream_f1.py data/replays/monza_2024_r --speed 10
+python scripts/stream_f1.py data/replays/monza_2024_r --from -60 --to 600   # just the start
 ```
 
 The streamer prints a link like `https://…/?live=K7Q4MX`; open it on any device, or
@@ -222,7 +229,8 @@ enter the code under **Live now** in the session picker. The viewer follows the 
 edge; drag back to rewatch, and **● Live** jumps back. To write your own sender (a
 flight computer, a phone app, a game), see [docs/live-protocol.md](docs/live-protocol.md).
 
-Live sessions are rocket-only for now.
+Both rockets and F1 sessions stream live. Live F1 views show the track, cars and
+leaderboard; the pit lane and starting grid appear in the recording afterwards.
 
 ## Tests
 
@@ -244,8 +252,8 @@ specification.
 3. ✅ 3D replay viewer (Angular + three.js)
 4. ✅ Deployment (Docker, Render)
 5. ✅ Rocket simulator, launch scene, Monte Carlo landing zones, re-simulation
-6. ✅ Live telemetry: UDP and WebSocket senders, relay, live viewing, recording
-7. Next: live F1 sessions, then uploads
+6. ✅ Live telemetry for rockets and F1: UDP and WebSocket senders, relay, live viewing, recording
+7. Next: uploads
 
 ## Disclaimer
 

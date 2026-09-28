@@ -165,7 +165,7 @@ export class RocketScene implements SceneModule {
     const first = !this.track;
     this.track = new RocketTrack(series);
     if (this.source instanceof LiveSource) {
-      const meta = this.source.currentMeta();
+      const meta = this.source.currentMeta<RocketMeta>();
       this.info.set({ ...meta, summary: summarize(this.track, meta.events) });
     }
 

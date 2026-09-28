@@ -10,6 +10,7 @@ import json
 import math
 import secrets
 import time
+from array import array
 from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -20,19 +21,34 @@ from telemetry.f1 import REPLAYS_DIR, save_metadata, save_replay
 
 PROTOCOL_VERSION = 1
 MAX_SESSIONS = 20
-MAX_SAMPLES = 60_000           # per session: ten minutes at 100 Hz
 IDLE_TIMEOUT_S = 10 * 60       # a session nobody has sent to in this long is closed
 ENDED_KEEP_S = 10 * 60         # ended sessions stay watchable this long
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L
 
-# Rocket channels a sample may carry (docs/data-format.md, rocket flights); others are dropped
+# Channels a sample may carry in each domain (docs/data-format.md); others are dropped
 ROCKET_CHANNELS = (
     "time", "x", "y", "z", "speed", "qw", "qx", "qy", "qz", "vertical_velocity",
     "acceleration", "mach", "dynamic_pressure", "angle_of_attack", "stability_margin",
     "thrust", "mass",
 )
+F1_CHANNELS = ("time", "x", "y", "z", "speed", "throttle", "brake", "gear", "rpm", "drs", "on_track")
 REQUIRED = ("time", "x", "y", "z")
-DEFAULTS = {"qw": 1.0}  # an unrotated rocket points straight up
+
+
+@dataclass(frozen=True)
+class Domain:
+    channels: tuple[str, ...]
+    defaults: dict               # values for channels a sample leaves out
+    max_samples: int             # across all vehicles in a session
+
+
+DOMAINS = {
+    # ten minutes at 100 Hz
+    "rocket": Domain(ROCKET_CHANNELS, {"qw": 1.0}, 60_000),
+    # about an hour of a full grid at 4 Hz; ~25 MB in compact arrays
+    "f1": Domain(F1_CHANNELS, {"on_track": 1.0}, 300_000),
+}
+LAP_FIELDS = ("lap_time", "lap_end", "position", "tyre_life", "stint", "pit_in", "pit_out")
 
 
 class LiveError(Exception):
@@ -47,8 +63,10 @@ class LiveSession:
     meta: dict
     created: float = field(default_factory=time.time)
     last_packet: float = field(default_factory=time.time)
-    columns: dict[str, list[float]] = field(default_factory=lambda: {c: [] for c in ROCKET_CHANNELS})
+    vehicles: dict[str, dict[str, array]] = field(default_factory=dict)  # vehicle id -> channel -> values
     events: list[dict] = field(default_factory=list)
+    laps: dict[tuple[str, int], dict] = field(default_factory=dict)       # F1: (driver, lap) -> record
+    samples: int = 0
     seen: set[int] = field(default_factory=set)
     packets: int = 0
     lost: int = 0                 # sequence numbers skipped over (UDP gives no resends)
@@ -58,22 +76,30 @@ class LiveSession:
     watchers: set[asyncio.Queue] = field(default_factory=set)
 
     @property
-    def samples(self) -> int:
-        return len(self.columns["time"])
+    def spec(self) -> Domain:
+        return DOMAINS[self.domain]
+
+    @property
+    def latest(self) -> float | None:
+        ends = [v["time"][-1] for v in self.vehicles.values() if len(v["time"])]
+        return max(ends) if ends else None
 
     def info(self) -> dict:
-        t = self.columns["time"]
+        name = self.meta.get("rocket", {}).get("name") or self.meta.get("session", {}).get("event")
         return {
-            "code": self.code, "domain": self.domain, "name": self.meta.get("rocket", {}).get("name"),
+            "code": self.code, "domain": self.domain, "name": name,
             "samples": self.samples, "packets": self.packets, "lost": self.lost,
-            "latest": t[-1] if t else None, "ended": self.ended, "replay_id": self.replay_id,
+            "latest": self.latest, "ended": self.ended, "replay_id": self.replay_id,
             "age": round(time.time() - self.created),
         }
 
     def snapshot(self) -> dict:
         """Everything so far, for a viewer that just joined."""
-        return {"type": "snapshot", "meta": self.meta, "columns": self.columns, "events": self.events,
-                "ended": self.ended, "replay_id": self.replay_id}
+        return {
+            "type": "snapshot", "meta": self.meta, "events": self.events, "laps": list(self.laps.values()),
+            "vehicles": {vid: {c: list(values) for c, values in cols.items()} for vid, cols in self.vehicles.items()},
+            "ended": self.ended, "replay_id": self.replay_id,
+        }
 
 
 _sessions: dict[str, LiveSession] = {}
@@ -98,12 +124,19 @@ def expire() -> None:
 
 def create(domain: str, meta: dict) -> LiveSession:
     expire()
-    if domain != "rocket":
-        raise LiveError("Only rocket sessions can stream live so far")
+    if domain not in DOMAINS:
+        raise LiveError(f"Unknown domain '{domain}'; use one of {', '.join(DOMAINS)}")
     if len(_sessions) >= MAX_SESSIONS:
         raise LiveError("Too many live sessions right now; try again later")
-    if not isinstance(meta.get("rocket"), dict):
+    if domain == "rocket" and not isinstance(meta.get("rocket"), dict):
         raise LiveError("meta.rocket (the rocket's geometry) is required")
+    if domain == "f1":
+        drivers = meta.get("drivers")
+        if not isinstance(drivers, list) or not drivers or not all(isinstance(d, dict) and d.get("code") for d in drivers):
+            raise LiveError("meta.drivers (a list with each driver's code) is required")
+        outline = meta.get("track_outline")
+        if not isinstance(outline, list) or len(outline) < 10:
+            raise LiveError("meta.track_outline (the track as [x, y, z] points) is required")
     session = LiveSession(code=_new_code(), key=secrets.token_urlsafe(12), domain=domain, meta=meta)
     _sessions[session.code] = session
     return session
@@ -124,6 +157,15 @@ def _number(value) -> float:
     if not math.isfinite(v):
         raise ValueError("not a finite number")
     return v
+
+
+def _vehicle_id(session: LiveSession, raw: dict) -> str:
+    if session.domain == "rocket":
+        return "rocket"
+    vid = str(raw.get("vehicle_id", ""))
+    if vid not in {d["code"] for d in session.meta["drivers"]}:
+        raise ValueError(f"unknown vehicle '{vid}'")
+    return vid
 
 
 def ingest(packet: dict) -> LiveSession:
@@ -151,18 +193,21 @@ def ingest(packet: dict) -> LiveSession:
     session.packets += 1
     session.last_packet = time.time()
 
+    spec = session.spec
     new_samples = []
     for raw in packet.get("samples", []) or []:
-        if session.samples >= MAX_SAMPLES:
+        if session.samples >= spec.max_samples:
             break
         try:
-            sample = {c: _number(raw[c]) if c in raw else DEFAULTS.get(c, 0.0) for c in ROCKET_CHANNELS}
-            if any(c not in raw for c in REQUIRED):
+            if not isinstance(raw, dict) or any(c not in raw for c in REQUIRED):
                 raise ValueError("missing time/x/y/z")
-        except (TypeError, ValueError, KeyError):
+            vid = _vehicle_id(session, raw)
+            sample = {c: _number(raw[c]) if raw.get(c) is not None else spec.defaults.get(c, 0.0)
+                      for c in spec.channels}
+        except (TypeError, ValueError):
             continue  # one bad sample doesn't sink the packet
-        _insert(session, sample)
-        new_samples.append(sample)
+        if _insert(session, vid, sample):
+            new_samples.append({"vehicle_id": vid, **sample})
 
     new_events = []
     for e in packet.get("events", []) or []:
@@ -177,25 +222,54 @@ def ingest(packet: dict) -> LiveSession:
         session.events.sort(key=lambda x: x["time"])
         new_events.append(event)
 
-    if new_samples or new_events:
-        _broadcast(session, {"type": "data", "samples": new_samples, "events": new_events})
+    new_laps = []
+    for raw in packet.get("laps", []) or []:
+        lap = _lap(session, raw)
+        if lap:
+            session.laps[(lap["driver"], lap["lap"])] = lap
+            new_laps.append(lap)
+
+    if new_samples or new_events or new_laps:
+        _broadcast(session, {"type": "data", "samples": new_samples, "events": new_events, "laps": new_laps})
     if packet.get("end"):
         end(session)
     return session
 
 
-def _insert(session: LiveSession, sample: dict) -> None:
-    """Add a sample in time order; UDP can deliver packets out of order."""
-    times = session.columns["time"]
+def _lap(session: LiveSession, raw) -> dict | None:
+    """A completed lap (F1), in the replay's laps format; None if it isn't valid."""
+    if session.domain != "f1" or not isinstance(raw, dict):
+        return None
+    try:
+        driver = str(raw["driver"])
+        if driver not in {d["code"] for d in session.meta["drivers"]}:
+            return None
+        lap = {"driver": driver, "lap": int(raw["lap"])}
+        for f in LAP_FIELDS:
+            lap[f] = _number(raw[f]) if raw.get(f) is not None else None
+        lap["compound"] = str(raw["compound"])[:16] if raw.get("compound") else None
+        return lap
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _insert(session: LiveSession, vid: str, sample: dict) -> bool:
+    """Add a sample in time order (UDP can deliver packets out of order); False if it's a repeat."""
+    cols = session.vehicles.get(vid)
+    if cols is None:
+        cols = session.vehicles[vid] = {c: array("d") for c in session.spec.channels}
+    times = cols["time"]
     if not times or sample["time"] > times[-1]:
-        for c in ROCKET_CHANNELS:
-            session.columns[c].append(sample[c])
-        return
-    i = bisect_right(times, sample["time"])
-    if i and times[i - 1] == sample["time"]:
-        return  # already have this instant
-    for c in ROCKET_CHANNELS:
-        session.columns[c].insert(i, sample[c])
+        for c, values in cols.items():
+            values.append(sample[c])
+    else:
+        i = bisect_right(times, sample["time"])
+        if i and times[i - 1] == sample["time"]:
+            return False  # already have this instant
+        for c, values in cols.items():
+            values.insert(i, sample[c])
+    session.samples += 1
+    return True
 
 
 def _broadcast(session: LiveSession, message: dict) -> None:
@@ -211,7 +285,7 @@ def end(session: LiveSession) -> None:
     if session.ended:
         return
     session.ended = True
-    if session.samples >= 2:
+    if any(len(cols["time"]) >= 2 for cols in session.vehicles.values()):
         try:
             session.replay_id = record(session)
         except OSError:
@@ -219,7 +293,7 @@ def end(session: LiveSession) -> None:
     _broadcast(session, {"type": "end", "replay_id": session.replay_id})
 
 
-def summarize(columns: dict[str, list[float]], events: list[dict]) -> dict:
+def summarize(columns: dict, events: list[dict]) -> dict:
     """The same flight summary a simulated replay carries, from what was streamed."""
     t, z = columns["time"], columns["z"]
     speed = [v / 3.6 for v in columns["speed"]]
@@ -243,25 +317,44 @@ def summarize(columns: dict[str, list[float]], events: list[dict]) -> dict:
     }
 
 
+def _frame(session: LiveSession) -> pd.DataFrame:
+    """Every vehicle's samples in the replay's long format."""
+    frames = [pd.DataFrame({"time": list(cols["time"]), "vehicle_id": vid,
+                            **{c: list(v) for c, v in cols.items() if c != "time"}})
+              for vid, cols in session.vehicles.items() if len(cols["time"])]
+    frame = pd.concat(frames, ignore_index=True).sort_values(["time", "vehicle_id"], ignore_index=True)
+    if session.domain == "f1":
+        # The replay format's integer and flag channels
+        for c in ("brake", "gear", "drs"):
+            frame[c] = frame[c].round().astype("Int8")
+        frame["on_track"] = frame["on_track"] > 0.5
+    return frame
+
+
 def record(session: LiveSession) -> str:
-    """Write the stream as a rocket replay, so it can be watched again."""
+    """Write the stream as a replay, so it can be watched again."""
     stamp = datetime.now(timezone.utc)
     replay_id = f"live_{session.code.lower()}_{stamp:%Y%m%d_%H%M%S}"
-    frame = pd.DataFrame({"time": session.columns["time"], "vehicle_id": "rocket",
-                          **{c: session.columns[c] for c in ROCKET_CHANNELS if c != "time"}})
+    frame = _frame(session)
+    base_name = session.meta.get("session", {}).get("name", "flight" if session.domain == "rocket" else "session")
     meta = {
         **session.meta,
-        "domain": "rocket",
-        "session": {**session.meta.get("session", {}), "year": stamp.year,
-                    "name": f"Live · {session.meta.get('session', {}).get('name', 'flight')}",
+        "domain": session.domain,
+        "session": {**session.meta.get("session", {}), "year": stamp.year, "name": f"Live · {base_name}",
                     "date": stamp.replace(microsecond=0, tzinfo=None).isoformat()},
-        "time_range": {"start": session.columns["time"][0], "end": session.columns["time"][-1]},
-        "events": session.events,
-        "summary": summarize(session.columns, session.events),
+        "time_range": {"start": float(frame["time"].min()), "end": float(frame["time"].max())},
         "live": {"code": session.code, "packets": session.packets, "lost": session.lost},
     }
+    if session.domain == "rocket":
+        cols = session.vehicles["rocket"]
+        meta["events"] = session.events
+        meta["summary"] = summarize(cols, session.events)
     save_replay(frame, REPLAYS_DIR / f"{replay_id}.parquet")
-    save_metadata(meta, REPLAYS_DIR / f"{replay_id}.meta.json")  # written last: the replay is complete
+    save_metadata(meta, REPLAYS_DIR / f"{replay_id}.meta.json")
+    if session.domain == "f1":
+        # Written last: an F1 replay counts as complete once its laps file exists
+        laps = sorted(session.laps.values(), key=lambda l: (l["lap_end"] is None, l["lap_end"] or 0))
+        (REPLAYS_DIR / f"{replay_id}.laps.json").write_text(json.dumps(laps, indent=2))
     return replay_id
 
 

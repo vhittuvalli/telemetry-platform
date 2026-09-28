@@ -32,7 +32,7 @@ def test_stream_over_websocket_is_watched_live_and_recorded(tmp_path, monkeypatc
     s = register()
     with client.websocket_connect(f"/live/sessions/{s['code']}/watch") as watcher:
         snapshot = watcher.receive_json()
-        assert snapshot["type"] == "snapshot" and snapshot["columns"]["time"] == []
+        assert snapshot["type"] == "snapshot" and snapshot["vehicles"] == {}
         with client.websocket_connect("/live/ingest") as sender:
             sender.send_text(json.dumps(packet(s, 0, [sample(0, 0), sample(0.1, 5)],
                                                [{"name": "liftoff", "time": 0}])))
@@ -61,7 +61,7 @@ def test_packets_are_checked_deduplicated_and_ordered():
     live.ingest(packet(s, 3, [sample(0.3, 3)]))          # arrived late: slotted into place
     live.ingest(packet(s, 9, [sample(0.9, 9), {"time": 1.0}]))  # second sample lacks x/y/z: dropped
     session = live.get(s["code"])
-    assert session.columns["time"] == [0.3, 0.5, 0.9]
+    assert list(session.vehicles["rocket"]["time"]) == [0.3, 0.5, 0.9]
     assert session.lost == 3  # seq 6, 7, 8 never came
 
 
@@ -81,6 +81,37 @@ def test_udp_datagrams_are_ingested_and_errors_answered():
     assert sent and "error" in sent[0]
 
 
-def test_only_rocket_sessions_for_now():
-    res = client.post("/live/sessions", json={"domain": "f1", "meta": META})
-    assert res.status_code == 422
+F1_META = {
+    "session": {"event": "Test GP", "name": "Race"},
+    "drivers": [{"code": "AAA", "name": "A", "team": "T", "color": "#ff0000"},
+                {"code": "BBB", "name": "B", "team": "T", "color": "#0000ff"}],
+    "track_outline": [[i, i * 2, 0] for i in range(20)],
+}
+
+
+def test_f1_sessions_need_drivers_and_a_track():
+    assert client.post("/live/sessions", json={"domain": "f1", "meta": META}).status_code == 422
+    assert client.post("/live/sessions", json={"domain": "nope", "meta": META}).status_code == 422
+
+
+def test_f1_stream_keeps_cars_apart_takes_laps_and_records_a_full_replay(tmp_path, monkeypatch):
+    monkeypatch.setattr(live, "REPLAYS_DIR", tmp_path)
+    s = client.post("/live/sessions", json={"domain": "f1", "meta": F1_META}).json()
+    car = lambda vid, t: {"vehicle_id": vid, "time": t, "x": t, "y": 0, "z": 0, "speed": 200, "gear": 7}
+    live.ingest(packet(s, 0, [car("AAA", 0), car("BBB", 0), car("AAA", 0.25), car("ZZZ", 0.25)]))
+    live.ingest({**packet(s, 1, [car("BBB", 0.25)]),
+                 "laps": [{"driver": "AAA", "lap": 1, "lap_time": 81.2, "lap_end": 81.2, "position": 1,
+                           "compound": "MEDIUM"}, {"driver": "ZZZ", "lap": 1}]})
+    session = live.get(s["code"])
+    assert set(session.vehicles) == {"AAA", "BBB"}            # ZZZ isn't in the field
+    assert list(session.vehicles["AAA"]["time"]) == [0, 0.25]
+    assert list(session.laps) == [("AAA", 1)]
+    assert session.snapshot()["laps"][0]["compound"] == "MEDIUM"
+
+    live.ingest(packet(s, 2, end=True))
+    rid = session.replay_id
+    assert (tmp_path / f"{rid}.laps.json").exists()
+    import pandas as pd
+    frame = pd.read_parquet(tmp_path / f"{rid}.parquet")
+    assert set(frame["vehicle_id"]) == {"AAA", "BBB"} and str(frame["gear"].dtype) == "Int8"
+    assert json.loads((tmp_path / f"{rid}.meta.json").read_text())["domain"] == "f1"

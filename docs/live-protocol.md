@@ -1,7 +1,7 @@
 # Live Telemetry Protocol
 
 **Version:** 1
-**Status:** Draft; rocket sessions only (F1 live is planned)
+**Status:** Draft; rocket and F1 sessions
 
 Anything that can send UDP or open a WebSocket (a flight computer's ground station, a
 simulator, a phone, a game) can stream to the platform. Viewers watch live in the 3D
@@ -25,6 +25,21 @@ viewer, and when the stream ends it is saved as a replay.
 `meta.rocket` is required: the viewer builds the 3D model from it (length, diameter,
 launch CG, nose, body tubes, fins, motor, recovery). The easiest way to produce it is
 `telemetry.rocket.replay.flight_metadata()`, as `scripts/stream_rocket.py` does.
+
+For an F1 session, `domain` is `"f1"` and `meta` carries the field and the track, as in
+an F1 replay's metadata:
+
+```json
+{
+  "domain": "f1",
+  "meta": {
+    "session": { "year": 2024, "event": "Italian Grand Prix", "location": "Monza", "name": "Race" },
+    "drivers": [ { "code": "LEC", "number": "16", "name": "Charles Leclerc", "team": "Ferrari",
+                   "color": "#e8002d", "grid_position": 4, "status": null } ],
+    "track_outline": [ [x, y, z], "... a few hundred points around one lap, in meters" ]
+  }
+}
+```
 
 The response:
 
@@ -58,7 +73,13 @@ Each packet is one JSON object:
 - **Samples** use the rocket channels from `docs/data-format.md` (units there: meters,
   seconds, `speed` in km/h, the rest SI). `time`, `x`, `y`, `z` are required; other
   channels default to 0 (and `qw` to 1, pointing straight up). Unknown channels are ignored.
-- **Events** mark moments in the flight: `liftoff`, `rail_exit`, `burnout`, `apogee`,
+- **F1 samples** carry a `vehicle_id` (the driver's code, which must be in `meta.drivers`)
+  and the F1 channels: `speed`, `throttle`, `brake`, `gear`, `rpm`, `drs`, `on_track` (1/0).
+- **Laps** (F1): send each lap when it's completed, in the replay's laps format:
+  `{"driver": "LEC", "lap": 12, "lap_time": 84.1, "lap_end": 1043.6, "position": 2,
+  "compound": "HARD", "tyre_life": 9, "stint": 2, "pit_in": null, "pit_out": null}`.
+  They drive the leaderboard. Send them in a packet's `laps` list.
+- **Events** mark moments in a rocket flight: `liftoff`, `rail_exit`, `burnout`, `apogee`,
   `ejection`, `deploy:<parachute name>`, `landing`.
 - **`seq`** counts packets from 0. The server drops duplicates and counts gaps as lost
   packets. Late packets are fine: samples are slotted in by time.
@@ -87,13 +108,16 @@ format; errors come back as `{"error": "…"}` messages.
 ## Watching (for viewers other than the web app)
 
 `wss://<site>/live/sessions/<code>/watch` sends a `snapshot` of everything so far
-(`meta`, `columns`, `events`), then `data` messages with new `samples` and `events`
-about ten times a second, and an `end` message with the recording's `replay_id`.
+(`meta`, `vehicles` with each vehicle's columns, `events`, `laps`), then `data` messages
+with new `samples`, `events` and `laps` about ten times a second, and an `end` message with
+the recording's `replay_id`.
 
 ## Limits
 
-- Sessions end after 10 minutes without packets, and 60,000 samples (ten minutes at 100 Hz)
-  are kept per session.
+- Sessions end after 10 minutes without packets. A rocket session keeps 60,000 samples
+  (ten minutes at 100 Hz); an F1 session keeps 300,000 (about an hour of a full grid at 4 Hz).
+- Live F1 views show the track, cars and leaderboard; the pit lane and starting grid are
+  worked out from a whole session, so they appear in the recording, not live.
 - At most 20 live sessions at once per server.
 
 ## A minimal sender

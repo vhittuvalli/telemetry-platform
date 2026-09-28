@@ -82,15 +82,15 @@ async def watch_socket(ws: WebSocket, code: str):
             # Gather what arrived in the last batch interval into one message
             message = await queue.get()
             await asyncio.sleep(BATCH_S)
-            batch = {"type": "data", "samples": [], "events": []}
+            batch = {"type": "data", "samples": [], "events": [], "laps": []}
             ended = None
             for m in [message, *[queue.get_nowait() for _ in range(queue.qsize())]]:
                 if m["type"] == "end":
                     ended = m
                 else:
-                    batch["samples"] += m["samples"]
-                    batch["events"] += m["events"]
-            if batch["samples"] or batch["events"]:
+                    for k in ("samples", "events", "laps"):
+                        batch[k] += m[k]
+            if batch["samples"] or batch["events"] or batch["laps"]:
                 await ws.send_json(batch)
             if ended:
                 await ws.send_json(ended)
