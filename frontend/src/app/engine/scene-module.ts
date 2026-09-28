@@ -13,6 +13,7 @@ export interface Timeline {
   start: number;
   end: number;
   openAt: number;
+  live?: boolean; // the end keeps moving as data arrives
 }
 
 /**
@@ -24,7 +25,7 @@ export interface SceneModule {
   readonly cameraOptions: readonly CameraOption[];
   readonly showLabels: WritableSignal<boolean>;
 
-  /** Load the session's data and build the scene. */
+  /** Load the session's data and build the scene. Live sessions emit again as data arrives. */
   load(): Observable<Timeline>;
   /** Every frame, outside Angular: move vehicles and cameras to time `t`. */
   update(t: number, dt: number): void;

@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { Subscription, switchMap } from 'rxjs';
 import { ReplayApiService } from '../replay/replay-api.service';
 import { ReplayMeta, RocketMeta, SessionInfo } from '../replay/replay.models';
-import { ReplaySource } from '../replay/replay-source';
+import { DataSource, ReplaySource } from '../replay/replay-source';
+import { LiveSource } from '../replay/live-source';
 import { PlaybackClock } from '../replay/playback-clock';
 import { ViewerEngine } from '../engine/viewer-engine';
 import { SceneModule } from '../engine/scene-module';
@@ -15,6 +16,9 @@ import { RocketScene } from '../rocket/rocket-scene';
 import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { RocketPanelsComponent } from '../rocket-panels/rocket-panels.component';
+
+/** Seconds a live view stays behind the newest data, so gaps between batches don't show. */
+const LIVE_DELAY_S = 0.6;
 
 /**
  * The 3D viewer shell shared by every domain: engine, playback clock and controls.
@@ -62,6 +66,10 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   protected speed = signal(1);
   protected timeRange = signal<{ start: number; end: number } | null>(null);
   protected loadError = signal<string | null>(null);
+  protected liveSource = signal<LiveSource | null>(null);
+  protected following = signal(false); // playing at the live edge
+  private liveEdge = 0;
+  private liveEdgeAt = 0;
   protected readonly speeds = [1, 2, 5, 10, 20];
   private lastUiUpdate = 0;
 
@@ -90,7 +98,7 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
 
   // ---------- loading and switching sessions ----------
 
-  private createModule(source: ReplaySource, meta: ReplayMeta): SceneModule {
+  private createModule(source: DataSource, meta: ReplayMeta): SceneModule {
     if (meta.domain === 'rocket') return new RocketScene(this.engine, source, this.api, meta);
     return new F1Scene(this.engine, source, this.api, meta);
   }
@@ -98,7 +106,9 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
   private loadReplay(id: string | null): void {
     this.clearReplay();
     if (!id) return;
-    const source = new ReplaySource(this.api, id);
+    // "live:CODE" watches a live session; anything else is a saved replay
+    const source = id.startsWith('live:') ? new LiveSource(this.api, id.slice(5)) : new ReplaySource(this.api, id);
+    this.liveSource.set(source instanceof LiveSource ? source : null);
     this.loading = source.meta().pipe(
       switchMap((meta) => {
         this.loaded.emit(meta.session);
@@ -107,12 +117,22 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
         return module.load();
       }),
     ).subscribe({
-      next: ({ start, end, openAt }) => {
+      next: ({ start, end, openAt, live }) => {
+        this.timeRange.set({ start, end });
+        if (live) {
+          // Where the stream has got to, and when we heard: the live edge moves on in real time from there
+          this.liveEdge = end;
+          this.liveEdgeAt = performance.now();
+        }
+        if (this.clock) {
+          this.clock.end = end; // a live flight grew
+          return;
+        }
         this.clock = new PlaybackClock(start, end);
         this.clock.seek(openAt);
         this.clock.playing = true;
-        this.timeRange.set({ start, end });
         this.playing.set(true);
+        this.following.set(!!live);
       },
       error: (err) => this.fail(this.module() ? 'Failed to load replay data' : 'Failed to load replay metadata', err),
     });
@@ -129,6 +149,8 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     this.module()?.dispose();
     this.module.set(null);
     this.clock = undefined;
+    this.liveSource.set(null);
+    this.following.set(false);
 
     this.currentTime.set(0);
     this.playing.set(false);
@@ -153,12 +175,23 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     const value = Number((event.target as HTMLInputElement).value);
     this.clock.seek(value);
     this.currentTime.set(value);
+    // Dragging back from the live edge leaves live mode; dragging to the end rejoins it
+    if (this.liveSource()) this.following.set(value >= this.clock.end - 0.5);
+  }
+
+  /** Jump back to the live edge and keep up with it. */
+  protected goLive(): void {
+    if (!this.clock) return;
+    this.following.set(true);
+    this.clock.playing = true;
+    this.playing.set(true);
   }
 
   protected seekTo(t: number): void {
     if (!this.clock) return;
     this.clock.seek(t);
     this.currentTime.set(this.clock.time);
+    if (this.liveSource()) this.following.set(false);
   }
 
   protected setSpeed(s: number): void {
@@ -200,7 +233,13 @@ export class ReplayViewerComponent implements AfterViewInit, OnDestroy {
     const module = this.module();
 
     if (this.clock && module) {
-      this.clock.tick(dt);
+      if (this.following() && !this.liveSource()?.ended()) {
+        // Stay just behind the live edge, advancing smoothly between batches of data
+        const edge = this.liveEdge + (performance.now() - this.liveEdgeAt) / 1000;
+        this.clock.time = Math.max(this.clock.start, Math.min(this.clock.end, edge - LIVE_DELAY_S));
+      } else {
+        this.clock.tick(dt);
+      }
       module.update(this.clock.time, dt);
 
       const now = performance.now();

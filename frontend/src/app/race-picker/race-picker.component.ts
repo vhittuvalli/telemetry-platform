@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, inject, input, output, signal } from '@an
 import { Subscription, switchMap, takeWhile, timer } from 'rxjs';
 import { ReplayApiService } from '../replay/replay-api.service';
 import {
-  BuildJob, CatalogEvent, CatalogSession, ReplaySummary,
+  BuildJob, CatalogEvent, CatalogSession, LiveSessionInfo, ReplaySummary,
 } from '../replay/replay.models';
 
 type SessionView = CatalogSession['status'] | 'failed' | 'unbuilt';
@@ -34,7 +34,13 @@ export class RacePickerComponent implements OnInit, OnDestroy {
   private seasonSub?: Subscription;
   private watching = new Set<string>(); // build ids being polled
 
+  protected liveSessions = signal<LiveSessionInfo[]>([]);
+  protected liveCode = signal('');
+
   ngOnInit(): void {
+    this.subs.add(this.api.getLiveSessions().subscribe({
+      next: (sessions) => this.liveSessions.set(sessions.filter((s) => !s.ended)),
+    }));
     // The catalog is always browsable; whether unbuilt sessions can be built depends on the server
     this.subs.add(this.api.getBuildConfig().subscribe({
       next: (config) => this.buildsEnabled.set(config.enabled),
@@ -51,6 +57,16 @@ export class RacePickerComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.subs.unsubscribe();
     this.seasonSub?.unsubscribe();
+  }
+
+  protected watchCode(event: Event): void {
+    event.preventDefault();
+    const code = this.liveCode().trim().toUpperCase();
+    if (code) this.select.emit(`live:${code}`);
+  }
+
+  protected codeFrom(event: Event): string {
+    return (event.target as HTMLInputElement).value;
   }
 
   protected onYearChange(event: Event): void {

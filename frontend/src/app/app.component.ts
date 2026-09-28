@@ -34,9 +34,14 @@ export class AppComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    // A shared link to a live session (?live=CODE) opens it straight away
+    const liveCode = new URLSearchParams(location.search).get('live');
+    if (liveCode) this.replayId.set(`live:${liveCode.trim().toUpperCase()}`);
+
     this.api.listReplays().subscribe({
       next: (replays) => {
         this.replays.set(replays);
+        if (liveCode) return;
         // Reopen the last watched replay, else the newest one, else let the user pick
         const last = readLastReplay();
         const start = replays.find((r) => r.id === last) ?? replays[0];
@@ -51,7 +56,8 @@ export class AppComponent implements OnInit {
     this.replayId.set(id);
     this.pickerOpen.set(false);
     this.launchOpen.set(false);
-    if (id.startsWith('sim_')) return; // simulated flights live in server memory; don't reopen them later
+    // Simulated and live flights live in server memory; don't reopen them later
+    if (id.startsWith('sim_') || id.startsWith('live:')) return;
     try {
       localStorage.setItem(LAST_REPLAY_KEY, id);
     } catch {

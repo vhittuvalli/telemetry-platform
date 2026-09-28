@@ -80,3 +80,22 @@ button {
   pointer-events: none;
   z-index: 2;
 }
+.live-badge {
+  white-space: nowrap;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: #3a1515;
+  color: #ff8a80;
+
+  &.on {
+    background: #e10600;
+    color: #fff;
+  }
+
+  &.ended {
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #333;
+    color: #c3c2b7;
+  }
+}

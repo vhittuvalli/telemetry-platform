@@ -145,3 +145,36 @@ button, select {
     vertical-align: -1px;
   }
 }
+
+.live {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.code {
+  display: flex;
+  gap: 6px;
+
+  input {
+    width: 110px;
+    padding: 6px 8px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background: #1e1e1e;
+    color: #fff;
+    font: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+}
+
+.live-session .dot { color: #ff5a4f; }
+
+code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #2a2a2a;
+  font-size: 12px;
+}

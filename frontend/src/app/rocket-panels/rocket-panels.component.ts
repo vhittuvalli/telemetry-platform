@@ -48,7 +48,9 @@ export class RocketPanelsComponent {
       { label: 'Max Q', value: `${(s.max_q / 1000).toFixed(1)} kPa`, at: s.max_q_time },
       { label: 'Max acceleration', value: `${(s.max_acceleration / G).toFixed(1)} g`, at: null },
       { label: 'Rail exit speed', value: `${s.rail_exit_speed.toFixed(1)} m/s`, at: null },
-      { label: 'Landed', value: `${Math.round(Math.hypot(lx, ly)).toLocaleString()} m from the pad`, at: s.flight_time },
+      // Until a live flight lands, the last position is where it is now
+      { label: m.events.some((e) => e.name === 'landing') ? 'Landed' : 'Now',
+        value: `${Math.round(Math.hypot(lx, ly)).toLocaleString()} m from the pad`, at: s.flight_time },
     ];
   });
 

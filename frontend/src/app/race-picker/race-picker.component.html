@@ -8,6 +8,32 @@
     }
   </div>
 
+  <div class="live">
+    <h3>Live now</h3>
+    <form class="code" (submit)="watchCode($event)">
+      <input
+        [value]="liveCode()"
+        (input)="liveCode.set(codeFrom($event))"
+        placeholder="Session code"
+        aria-label="Live session code"
+        maxlength="6"
+        autocapitalize="characters"
+      />
+      <button type="submit" [disabled]="!liveCode().trim()">Watch</button>
+    </form>
+  </div>
+  @if (liveSessions().length) {
+    <div class="ready">
+      @for (s of liveSessions(); track s.code) {
+        <button class="live-session" [class.active]="'live:' + s.code === current()" (click)="select.emit('live:' + s.code)">
+          <span class="dot">●</span> {{ s.name ?? 'Live flight' }} · {{ s.code }}
+        </button>
+      }
+    </div>
+  } @else {
+    <p class="hint">No one is streaming right now. Start a stream with <code>scripts/stream_rocket.py</code>, then watch it here with its code.</p>
+  }
+
   @if (replays().length) {
     <h3>Ready to watch</h3>
     <div class="ready">
