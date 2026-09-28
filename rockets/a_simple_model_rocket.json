@@ -1,0 +1,140 @@
+{
+  "name": "A simple model rocket",
+  "body_tubes": [
+    {
+      "length": 0.3,
+      "diameter": 0.025,
+      "position": 0.1
+    }
+  ],
+  "fins": [
+    {
+      "count": 3,
+      "root_chord": 0.0508,
+      "tip_chord": 0.0508,
+      "span": 0.03,
+      "sweep": 0.0254,
+      "thickness": 0.002,
+      "position": 0.34919999999999995,
+      "cross_section": "rounded"
+    }
+  ],
+  "masses": [
+    {
+      "name": "Nose cone",
+      "mass": 0.013156,
+      "cg": 0.07602,
+      "length": 0.1,
+      "radius": 0.0125
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.015381,
+      "cg": 0.25,
+      "length": 0.3,
+      "radius": 0.0125
+    },
+    {
+      "name": "Parachute",
+      "mass": 0.007976,
+      "cg": 0.153,
+      "length": 0.042,
+      "radius": 0.0
+    },
+    {
+      "name": "Shock cord",
+      "mass": 0.00072,
+      "cg": 0.146,
+      "length": 0.052,
+      "radius": 0.0
+    },
+    {
+      "name": "Wadding",
+      "mass": 0.002,
+      "cg": 0.195,
+      "length": 0.03,
+      "radius": 0.0
+    },
+    {
+      "name": "Launch lug",
+      "mass": 0.000449,
+      "cg": 0.25,
+      "length": 0.035,
+      "radius": 0.0035
+    },
+    {
+      "name": "Trapezoidal fin set",
+      "mass": 0.006156,
+      "cg": 0.3873,
+      "length": 0.0508,
+      "radius": 0.0
+    },
+    {
+      "name": "Centering ring",
+      "mass": 0.000179,
+      "cg": 0.354,
+      "length": 0.002,
+      "radius": 0.0115
+    },
+    {
+      "name": "Centering ring",
+      "mass": 0.000179,
+      "cg": 0.399,
+      "length": 0.002,
+      "radius": 0.0115
+    },
+    {
+      "name": "Inner Tube",
+      "mass": 0.001482,
+      "cg": 0.3675,
+      "length": 0.075,
+      "radius": 0.0095
+    },
+    {
+      "name": "Engine block",
+      "mass": 0.000481,
+      "cg": 0.3345,
+      "length": 0.005,
+      "radius": 0.009
+    }
+  ],
+  "launch_lugs": [
+    {
+      "length": 0.035,
+      "outer_diameter": 0.007,
+      "inner_diameter": 0.005
+    }
+  ],
+  "recovery": [
+    {
+      "name": "Parachute",
+      "diameter": 0.3,
+      "cd": 0.8,
+      "deploy": "ejection",
+      "deploy_altitude": null,
+      "deploy_delay": 0.0
+    }
+  ],
+  "nose": {
+    "shape": "ogive",
+    "length": 0.1,
+    "diameter": 0.025,
+    "shape_parameter": 1.0,
+    "position": 0.0
+  },
+  "motor": {
+    "file": "motors/estes_a8.eng",
+    "aft_position": 0.408,
+    "ejection_delay": 3.0
+  },
+  "launch": {
+    "rail_length": 1.0,
+    "angle": 0.0,
+    "heading": 90.0,
+    "wind_speed": 2.0,
+    "wind_from": 90.0,
+    "site_altitude": 0.0,
+    "temperature": 288.15,
+    "pressure": 101325.0
+  }
+}

@@ -34,3 +34,7 @@ stack-data==0.6.3
 tornado==6.5.10
 traitlets==5.16.1
 wcwidth==0.9.1
+pytest==9.1.1
+# scripts/openrocket_export.py only (also needs Java and an OpenRocket 23.09 jar)
+orhelper==0.1.3
+JPype1==1.7.1

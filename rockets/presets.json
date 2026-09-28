@@ -1,0 +1,119 @@
+{
+  "name": "Presets",
+  "body_tubes": [
+    {
+      "length": 0.4572,
+      "diameter": 0.033655,
+      "position": 0.10668
+    }
+  ],
+  "fins": [
+    {
+      "count": 3,
+      "root_chord": 0.05,
+      "tip_chord": 0.038099999999999995,
+      "span": 0.04064,
+      "sweep": 0.025,
+      "thickness": 0.003,
+      "position": 0.51388,
+      "cross_section": "square"
+    }
+  ],
+  "masses": [
+    {
+      "name": "Nose cone",
+      "mass": 0.010206,
+      "cg": 0.08137,
+      "length": 0.10668,
+      "radius": 0.01683
+    },
+    {
+      "name": "Body tube",
+      "mass": 0.021829,
+      "cg": 0.33528,
+      "length": 0.4572,
+      "radius": 0.01683
+    },
+    {
+      "name": "18 In. Nylon Chute",
+      "mass": 0.004145,
+      "cg": 0.14458,
+      "length": 0.025,
+      "radius": 0.0
+    },
+    {
+      "name": "Launch lug",
+      "mass": 0.000214,
+      "cg": 0.33528,
+      "length": 0.04445,
+      "radius": 0.00224
+    },
+    {
+      "name": "Trapezoidal fin set",
+      "mass": 0.010956,
+      "cg": 0.54798,
+      "length": 0.05,
+      "radius": 0.0
+    },
+    {
+      "name": "Centering ring",
+      "mass": 0.000289,
+      "cg": 0.56325,
+      "length": 0.00127,
+      "radius": 0.01627
+    },
+    {
+      "name": "Centering ring",
+      "mass": 0.000289,
+      "cg": 0.51245,
+      "length": 0.00127,
+      "radius": 0.01627
+    },
+    {
+      "name": "Inner Tube",
+      "mass": 0.001417,
+      "cg": 0.53531,
+      "length": 0.06985,
+      "radius": 0.0124
+    }
+  ],
+  "launch_lugs": [
+    {
+      "length": 0.044449999999999996,
+      "outer_diameter": 0.004470399999999999,
+      "inner_diameter": 0.0038099999999999996
+    }
+  ],
+  "recovery": [
+    {
+      "name": "18 In. Nylon Chute",
+      "diameter": 0.4572,
+      "cd": 0.8,
+      "deploy": "ejection",
+      "deploy_altitude": null,
+      "deploy_delay": 0.0
+    }
+  ],
+  "nose": {
+    "shape": "ogive",
+    "length": 0.10668,
+    "diameter": 0.033655,
+    "shape_parameter": 1.0,
+    "position": 0.0
+  },
+  "motor": {
+    "file": "motors/estes_d12.eng",
+    "aft_position": 0.57023,
+    "ejection_delay": 7.0
+  },
+  "launch": {
+    "rail_length": 1.0,
+    "angle": 0.0,
+    "heading": 90.0,
+    "wind_speed": 2.0,
+    "wind_from": 90.0,
+    "site_altitude": 0.0,
+    "temperature": 288.15,
+    "pressure": 101325.0
+  }
+}
