@@ -64,7 +64,10 @@ export function computeStandings(
     const next = info.laps[done];
     const finalLap = info.laps[info.laps.length - 1];
     const finished = d.status === 'Finished' || (d.status ?? '').startsWith('+');
-    const retired = !finished && finalLap != null && t > finalLap.lap_end! + 60;
+    // Out once two of their usual laps pass without completing one (safety car laps and
+    // pit stops stay inside that). Live, the final lap is just the latest one so far.
+    const lapTime = finalLap?.lap_time ?? 90;
+    const retired = !finished && finalLap != null && t > finalLap.lap_end! + Math.max(60, 2 * lapTime);
     const inPit = info.pits.some(([enter, exit]) => enter <= t && t < exit);
 
     // Continuous progress: completed laps + fraction of the current lap

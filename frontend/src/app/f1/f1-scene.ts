@@ -4,7 +4,8 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { Observable, forkJoin, map, tap } from 'rxjs';
 import { ReplayApiService } from '../replay/replay-api.service';
 import { DataSource } from '../replay/replay-source';
-import { Driver, F1Meta, VehicleSeries } from '../replay/replay.models';
+import { LiveSource } from '../replay/live-source';
+import { Driver, F1Meta, LapRecord, Series, VehicleSeries } from '../replay/replay.models';
 import { CameraOption, SceneModule, Timeline } from '../engine/scene-module';
 import { ViewerEngine, toScene } from '../engine/viewer-engine';
 import { VehicleState, VehicleTrack } from './vehicle-track';
@@ -45,6 +46,8 @@ export class F1Scene implements SceneModule {
   });
   readonly lapText = computed(() => {
     const leaderLaps = this.standings()[0]?.lapsDone ?? 0;
+    // Live, the race's length isn't known yet
+    if (this.source.live) return `Lap ${leaderLaps + 1}`;
     const total = this.totalLaps();
     return `Lap ${Math.min(leaderLaps + 1, total)}/${total}`;
   });
@@ -89,6 +92,7 @@ export class F1Scene implements SceneModule {
   // ---------- loading ----------
 
   load(): Observable<Timeline> {
+    if (this.source instanceof LiveSource) return this.loadLive(this.source);
     this.buildTrack();
     const { start, end } = this.meta.time_range;
     this.drivers.set(this.meta.drivers);
@@ -114,6 +118,42 @@ export class F1Scene implements SceneModule {
       // Races open on the formed grid a few seconds before the lights; other sessions at the start
       map(() => ({ start, end, openAt: this.grid ? Math.max(start, this.grid.raceStart - 10) : 0 })),
     );
+  }
+
+  /**
+   * A live session: the track now, then cars and standings rebuilt from everything
+   * received each time more arrives. Pit lane and grid detection need the whole
+   * session, so a live view shows the track without them.
+   */
+  private loadLive(source: LiveSource): Observable<Timeline> {
+    this.buildTrack();
+    this.drivers.set(this.meta.drivers);
+    let first = true;
+    return source.series().pipe(
+      map((vehicles) => {
+        this.applyLive(vehicles, source.laps());
+        if (first) {
+          this.engine.add(buildEnvironment(this.layout!, { finishGantry: true }));
+          first = false;
+        }
+        const { start, end } = source.currentMeta().time_range;
+        return { start, end, openAt: end, live: true };
+      }),
+    );
+  }
+
+  private applyLive(vehicles: Map<string, Series>, laps: LapRecord[]): void {
+    const lapIndex = indexLaps(laps);
+    this.lapIndex.set(lapIndex);
+    this.totalLaps.set(laps.reduce((most, l) => Math.max(most, l.lap), 0));
+    for (const [id, series] of vehicles) {
+      // Finalizing cleans and smooths the data in place, so work on a copy: more keeps arriving
+      const copy = Object.fromEntries(Object.entries(series).map(([k, v]) => [k, v.slice()])) as unknown as VehicleSeries;
+      const track = new VehicleTrack(id, copy);
+      track.finalize();
+      this.tracks.set(id, track);
+    }
+    this.createCars(); // cars that have just appeared
   }
 
   private buildTrack(): void {
@@ -168,7 +208,7 @@ export class F1Scene implements SceneModule {
 
   private createCars(): void {
     for (const driver of this.meta.drivers) {
-      if (!this.tracks.has(driver.code)) continue;
+      if (!this.tracks.has(driver.code) || this.cars.has(driver.code)) continue;
       const color = driver.color ?? '#ffffff';
 
       const car = createCarModel(color);
