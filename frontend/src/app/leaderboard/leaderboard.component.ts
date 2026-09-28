@@ -1,5 +1,5 @@
 import { Component, input, output } from '@angular/core';
-import { StandingRow } from '../replay/standings';
+import { StandingRow } from '../f1/standings';
 
 @Component({
   selector: 'app-leaderboard',

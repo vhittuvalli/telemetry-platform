@@ -40,18 +40,21 @@ def column_to_list(series: pd.Series) -> list:
     return series.astype(object).where(series.notna(), None).tolist()
 
 def built_replays() -> list[dict]:
-    """Every fully built replay (all three files present), newest session first."""
+    """Every fully built replay, newest session first."""
     summaries = []
     for meta_path in REPLAYS_DIR.glob("*.meta.json"):
         replay_id = meta_path.name.removesuffix(".meta.json")
-        #the laps file is written last, so its presence means the build finished
         if not (REPLAYS_DIR / f"{replay_id}.parquet").exists():
             continue
-        if not (REPLAYS_DIR / f"{replay_id}.laps.json").exists():
+        meta = read_json(replay_id, ".meta.json")
+        domain = meta.get("domain", "f1") #replays built before domains existed are F1
+        #F1 builds write the laps file last, so its presence means the build finished
+        if domain == "f1" and not (REPLAYS_DIR / f"{replay_id}.laps.json").exists():
             continue
-        session = read_json(replay_id, ".meta.json")["session"]
+        session = meta["session"]
         summaries.append({
             "id": replay_id,
+            "domain": domain,
             "year": session["year"],
             "event": session["event"],
             "location": session["location"],

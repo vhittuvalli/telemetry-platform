@@ -1,3 +1,6 @@
+/** Which kind of session a replay holds; picks the scene and panels that show it. */
+export type Domain = 'f1' | 'rocket';
+
 export interface SessionInfo {
   year: number;
   event: string;
@@ -17,13 +20,20 @@ export interface Driver {
   status: string | null;
 }
 
-export interface ReplayMeta {
+export interface F1Meta {
+  domain?: 'f1'; // replays built before domains existed have none
   session: SessionInfo;
   time_range: { start: number; end: number };
   drivers: Driver[];
   track_outline: [number, number, number][];
 }
 
+export type ReplayMeta = F1Meta;
+
+/** One vehicle's columns, as the backend sends them: `time` plus any domain's channels. */
+export type Series = { time: number[] } & Record<string, (number | boolean | null)[]>;
+
+/** F1 car channels (see docs/data-format.md). */
 export interface VehicleSeries {
   time: number[];
   x: number[];
@@ -42,7 +52,7 @@ export interface ReplayDataWindow {
   replay_id: string;
   start: number;
   end: number;
-  vehicles: Record<string, VehicleSeries>;
+  vehicles: Record<string, Series>;
 }
 
 export interface LapRecord {
@@ -59,6 +69,7 @@ export interface LapRecord {
 }
 export interface ReplaySummary {
   id: string;
+  domain: Domain;
   year: number;
   event: string;
   location: string;

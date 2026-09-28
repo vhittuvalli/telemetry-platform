@@ -1,4 +1,4 @@
-import { Driver, LapRecord } from './replay.models';
+import { Driver, LapRecord } from '../replay/replay.models';
 
 export interface DriverLaps {
   laps: LapRecord[];          // completed laps with a known end time, in order

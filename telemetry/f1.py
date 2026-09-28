@@ -166,6 +166,7 @@ def build_metadata(session, replay, outline_points=500):
     ]
 
     return {
+        "domain": "f1",
         "session": {
             "year": int(session.date.year),
             "event": _json_safe(session.event["EventName"]),

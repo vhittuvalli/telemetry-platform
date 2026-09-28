@@ -1,4 +1,4 @@
-import { VehicleSeries } from './replay.models';
+import { VehicleSeries } from '../replay/replay.models';
 
 export interface VehicleState {
   x: number; y: number; z: number;
@@ -54,14 +54,7 @@ export class VehicleTrack {
 
   constructor(public readonly id: string, public readonly data: VehicleSeries) {}
 
-  /** Append a later chunk of data for this vehicle. */
-  append(more: VehicleSeries): void {
-    for (const key of Object.keys(this.data) as (keyof VehicleSeries)[]) {
-      (this.data[key] as unknown[]).push(...(more[key] as unknown[]));
-    }
-  }
-
-  /** Call once after all chunks are loaded: drop bad samples, precompute smoothed positions. */
+  /** Call once before use: drop bad samples, precompute smoothed positions. */
   finalize(radius = 2): void {
     this.dropMissingPositions();
     this.sx = smooth(this.data.x, radius);
