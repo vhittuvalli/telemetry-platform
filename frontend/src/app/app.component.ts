@@ -4,13 +4,14 @@ import { RacePickerComponent } from './race-picker/race-picker.component';
 import { ReplayApiService } from './replay/replay-api.service';
 import { ReplaySummary, RocketMeta, SessionInfo } from './replay/replay.models';
 import { LaunchDialogComponent } from './launch-dialog/launch-dialog.component';
+import { LiveDialogComponent, LiveDialogMode } from './live-dialog/live-dialog.component';
 
 const LAST_REPLAY_KEY = 'telemetry.lastReplay';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [ReplayViewerComponent, RacePickerComponent, LaunchDialogComponent],
+  imports: [ReplayViewerComponent, RacePickerComponent, LaunchDialogComponent, LiveDialogComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -24,6 +25,7 @@ export class AppComponent implements OnInit {
   protected loadedSession = signal<SessionInfo | null>(null);
   protected launchFrom = signal<RocketMeta | null>(null);
   protected launchOpen = signal(false);
+  protected liveDialog = signal<LiveDialogMode | null>(null); // open, on this tab
 
   /** Title for the header: from the replay list, or the loaded session for flights simulated on request. */
   protected current = computed(() => {
@@ -56,6 +58,7 @@ export class AppComponent implements OnInit {
     this.replayId.set(id);
     this.pickerOpen.set(false);
     this.launchOpen.set(false);
+    this.liveDialog.set(null);
     // Simulated and live flights live in server memory; don't reopen them later
     if (id.startsWith('sim_') || id.startsWith('live:')) return;
     try {
@@ -68,6 +71,12 @@ export class AppComponent implements OnInit {
   protected openLaunch(from: RocketMeta | null): void {
     this.launchFrom.set(from);
     this.launchOpen.set(true);
+  }
+
+  protected openLive(mode: LiveDialogMode): void {
+    this.refreshReplays(); // the F1 races a demo can stream
+    this.pickerOpen.set(false);
+    this.liveDialog.set(mode);
   }
 
   protected openPicker(): void {

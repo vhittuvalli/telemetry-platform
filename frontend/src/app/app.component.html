@@ -21,9 +21,14 @@
     (select)="choose($event)"
     (close)="pickerOpen.set(false)"
     (built)="refreshReplays()"
+    (goLive)="openLive($event)"
   />
 }
 
 @if (launchOpen()) {
   <app-launch-dialog [from]="launchFrom()" (launched)="choose($event)" (close)="launchOpen.set(false)" />
+}
+
+@if (liveDialog(); as mode) {
+  <app-live-dialog [mode]="mode" [replays]="replays()" (watch)="choose($event)" (close)="liveDialog.set(null)" />
 }

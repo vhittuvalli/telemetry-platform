@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   BuildJob, CatalogEvent, Dispersion, LapRecord, MotorSummary, ReplayDataWindow, ReplayMeta, ReplaySummary,
-  RocketSummary, SimulationRequest, LiveSessionInfo,
+  RocketSummary, SimulationRequest, LiveSessionInfo, NewLiveSession, DemoRequest,
 } from './replay.models';
 import { environment } from '../../environments/environment';
 
@@ -65,6 +65,14 @@ export class ReplayApiService {
   }
   getLiveSession(code: string): Observable<LiveSessionInfo> {
     return this.http.get<LiveSessionInfo>(`${API_URL}/live/sessions/${code}`);
+  }
+  /** A session for the visitor's own sender, drawn as one of the site's rocket designs. */
+  createLiveSession(rocket: string, name: string): Observable<NewLiveSession> {
+    const meta = name ? { session: { event: name } } : {};
+    return this.http.post<NewLiveSession>(`${API_URL}/live/sessions`, { domain: 'rocket', rocket, meta });
+  }
+  startDemo(req: DemoRequest): Observable<{ code: string; domain: string }> {
+    return this.http.post<{ code: string; domain: string }>(`${API_URL}/live/demo`, req);
   }
 
   getBuild(buildId: string): Observable<BuildJob> {

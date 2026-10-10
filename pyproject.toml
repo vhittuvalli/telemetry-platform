@@ -7,6 +7,12 @@ name = "telemetry"
 version = "0.1.0"
 description = "Telemetry analysis and 3D replay platform"
 requires-python = ">=3.10"
+# What `pip install` brings is the live sender (telemetry-live); the server and the simulator
+# install requirements.txt
+dependencies = ["websockets>=12"]
+
+[project.scripts]
+telemetry-live = "telemetry.live_cli:main"
 
 [tool.setuptools]
 packages = ["telemetry", "telemetry.rocket"]

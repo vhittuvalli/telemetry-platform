@@ -16,3 +16,7 @@ services:
         value: "false"
       - key: REPLAY_CACHE_SIZE
         value: "2"
+      # Render only passes HTTP, so UDP can't reach the server; senders use a WebSocket
+      # (or scripts/telemetry_relay.py). docs/self-hosting.md runs a server that takes UDP.
+      - key: LIVE_UDP_PORT
+        value: ""

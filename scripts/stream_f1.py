@@ -14,43 +14,12 @@ A server keeps up to 450,000 samples per live F1 session, enough for a full race
 """
 
 import argparse
-import json
-import math
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from telemetry import live_client  # noqa: E402
-
-
-def load_session(path: str, start: float | None, end: float | None) -> tuple[list[dict], list[dict], dict]:
-    """(samples, laps, registration meta) from a saved F1 replay."""
-    import pandas as pd
-    stem = Path(path)
-    stem = stem.with_name(stem.name.removesuffix(".parquet").removesuffix(".meta.json"))
-    frame = pd.read_parquet(f"{stem}.parquet")
-    meta = json.loads(Path(f"{stem}.meta.json").read_text())
-    laps = json.loads(Path(f"{stem}.laps.json").read_text())
-
-    if start is not None:
-        frame = frame[frame["time"] >= start]
-    if end is not None:
-        frame = frame[frame["time"] <= end]
-        laps = [l for l in laps if l.get("lap_end") is not None and l["lap_end"] <= end]
-    if start is not None:
-        laps = [l for l in laps if l.get("lap_end") is None or l["lap_end"] >= start]
-
-    frame = frame.assign(on_track=frame["on_track"].astype(int)).round(3)
-    # Leave out missing values: the server fills in defaults
-    samples = [{k: v for k, v in row.items() if not (isinstance(v, float) and math.isnan(v)) and v is not pd.NA}
-               for row in frame.to_dict("records")]
-    for s in samples:
-        for k in ("brake", "gear", "drs"):
-            if k in s:
-                s[k] = int(s[k])
-    registration = {"session": meta["session"], "drivers": meta["drivers"], "track_outline": meta["track_outline"]}
-    return samples, laps, registration
+from telemetry import live_client, live_sources  # noqa: E402
 
 
 def main() -> None:
@@ -59,17 +28,18 @@ def main() -> None:
     parser.add_argument("--from", dest="start", type=float, help="session time to start from, s (0 = session start)")
     parser.add_argument("--to", dest="end", type=float, help="session time to stop at, s")
     parser.add_argument("--site", default="http://localhost:8000", help="the platform's address")
-    parser.add_argument("--udp", default="127.0.0.1:9870",
-                        help="where to send UDP: the server itself, or a relay (default %(default)s)")
+    parser.add_argument("--udp", help="where to send UDP, host:port (default: the site's own UDP port, "
+                                      "or a WebSocket if it has none; give a relay's address to use one)")
     parser.add_argument("--websocket", action="store_true", help="send over a WebSocket to --site instead of UDP")
     parser.add_argument("--speed", type=float, default=1.0, help="playback speed (1 = real time)")
     args = parser.parse_args()
 
-    samples, laps, meta = load_session(args.replay, args.start, args.end)
-    cars = len({s["vehicle_id"] for s in samples})
-    print(f"{meta['session']['year']} {meta['session']['event']} · {meta['session']['name']}: "
-          f"{len(samples):,} samples from {cars} cars, {len(laps)} laps")
-    live_client.stream(args.site.rstrip("/"), "f1", meta, samples, laps=laps, udp=args.udp,
+    race = live_sources.f1_replay(args.replay, args.start, args.end)
+    cars = len({s["vehicle_id"] for s in race.samples})
+    session = race.meta["session"]
+    print(f"{session['year']} {session['event']} · {session['name']}: "
+          f"{len(race.samples):,} samples from {cars} cars, {len(race.laps)} laps")
+    live_client.stream(args.site.rstrip("/"), "f1", race.meta, race.samples, laps=race.laps, udp=args.udp,
                        websocket=args.websocket, speed=args.speed)
 
 

@@ -171,6 +171,19 @@ button, select {
 }
 
 .live-session .dot { color: #ff5a4f; }
+.go-live .dot { color: #ff5a4f; }
+.live-session .tag { margin-left: 4px; color: #aaa; font-size: 11px; }
+
+.go-live {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+@media (max-width: 560px) {
+  .live { flex-wrap: wrap; }
+  .go-live { margin-left: 0; }
+}
 
 code {
   padding: 1px 4px;

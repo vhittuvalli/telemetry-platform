@@ -38,8 +38,10 @@ USER app
 VOLUME /data
 
 EXPOSE 8000
+# live telemetry over UDP; publish it with -p 9870:9870/udp where the host allows UDP
+EXPOSE 9870/udp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ[\"PORT\"]}/health')"
 
 # Single worker: build jobs and replay caches are kept in process memory
-CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT} --workers 1 --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT} --workers 1 --ws-max-size 131072 --proxy-headers --forwarded-allow-ips='*'"]

@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from backend.limits import RateLimiter, env_int
 from telemetry.f1 import REPLAYS_DIR, save_metadata, save_replay
 
 PROTOCOL_VERSION = 1
@@ -24,6 +25,19 @@ MAX_SESSIONS = 20
 IDLE_TIMEOUT_S = 10 * 60       # a session nobody has sent to in this long is closed
 ENDED_KEEP_S = 10 * 60         # ended sessions stay watchable this long
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L
+
+# Limits for a public server: anyone can start a session and send packets
+MAX_SESSIONS_PER_IP = env_int("LIVE_MAX_SESSIONS_PER_IP", 3)   # open (not ended) at once
+MAX_META_BYTES = 256 * 1024          # a full F1 field and track is ~30 KB
+MAX_DATAGRAM = 8 * 1024              # senders keep to ~1,200 bytes; anything far bigger isn't ours
+MAX_MESSAGE = 64 * 1024              # a WebSocket packet
+MAX_WATCHERS = env_int("LIVE_MAX_WATCHERS", 100)               # viewers per session
+RECORDINGS_KEPT = env_int("LIVE_RECORDINGS_KEPT", 100)         # older live recordings are deleted
+# A 50x F1 stream is ~300 packets a second; one sender gets more than that, the server ten times it
+session_starts = RateLimiter(rate=1 / 120, burst=6)            # per IP: 6 at once, then one every 2 min
+packets_per_ip = RateLimiter(rate=env_int("LIVE_PACKETS_PER_IP", 500), burst=1000)
+packets_total = RateLimiter(rate=env_int("LIVE_PACKETS_TOTAL", 5000), burst=10_000)
+udp_replies = RateLimiter(rate=1, burst=5)                     # per IP: error replies over UDP
 
 # Channels a sample may carry in each domain (docs/data-format.md); others are dropped
 ROCKET_CHANNELS = (
@@ -61,6 +75,8 @@ class LiveSession:
     key: str
     domain: str
     meta: dict
+    owner: str = ""               # the IP that started it
+    demo: bool = False            # streamed by the server itself (backend/demos.py)
     created: float = field(default_factory=time.time)
     last_packet: float = field(default_factory=time.time)
     vehicles: dict[str, dict[str, array]] = field(default_factory=dict)  # vehicle id -> channel -> values
@@ -85,12 +101,12 @@ class LiveSession:
         return max(ends) if ends else None
 
     def info(self) -> dict:
-        name = self.meta.get("rocket", {}).get("name") or self.meta.get("session", {}).get("event")
+        name = self.meta.get("session", {}).get("event") or self.meta.get("rocket", {}).get("name")
         return {
             "code": self.code, "domain": self.domain, "name": name,
             "samples": self.samples, "packets": self.packets, "lost": self.lost,
             "latest": self.latest, "ended": self.ended, "replay_id": self.replay_id,
-            "age": round(time.time() - self.created),
+            "age": round(time.time() - self.created), "demo": self.demo,
         }
 
     def snapshot(self) -> dict:
@@ -128,12 +144,20 @@ def expire() -> None:
             del _sessions[code]
 
 
-def create(domain: str, meta: dict) -> LiveSession:
+class Throttled(LiveError):
+    """A sender is over a rate or count limit; the message says which."""
+
+
+def create(domain: str, meta: dict, owner: str = "", demo: bool = False) -> LiveSession:
     expire()
     if domain not in DOMAINS:
         raise LiveError(f"Unknown domain '{domain}'; use one of {', '.join(DOMAINS)}")
+    if len(json.dumps(meta)) > MAX_META_BYTES:
+        raise LiveError(f"meta is too large (limit {MAX_META_BYTES // 1024} KB)")
     if len(_sessions) >= MAX_SESSIONS:
-        raise LiveError("Too many live sessions right now; try again later")
+        raise Throttled("Too many live sessions right now; try again later")
+    if owner and sum(s.owner == owner and not s.ended for s in _sessions.values()) >= MAX_SESSIONS_PER_IP:
+        raise Throttled(f"You already have {MAX_SESSIONS_PER_IP} live sessions open; end one first")
     if domain == "rocket" and not isinstance(meta.get("rocket"), dict):
         raise LiveError("meta.rocket (the rocket's geometry) is required")
     if domain == "f1":
@@ -143,7 +167,10 @@ def create(domain: str, meta: dict) -> LiveSession:
         outline = meta.get("track_outline")
         if not isinstance(outline, list) or len(outline) < 10:
             raise LiveError("meta.track_outline (the track as [x, y, z] points) is required")
-    session = LiveSession(code=_new_code(), key=secrets.token_urlsafe(12), domain=domain, meta=meta)
+    if owner and not session_starts.allow(owner):
+        raise Throttled("Too many sessions started from your address; wait a couple of minutes")
+    session = LiveSession(code=_new_code(), key=secrets.token_urlsafe(16), domain=domain, meta=meta, owner=owner,
+                          demo=demo)
     _sessions[session.code] = session
     return session
 
@@ -172,6 +199,18 @@ def _vehicle_id(session: LiveSession, raw: dict) -> str:
     if vid not in {d["code"] for d in session.meta["drivers"]}:
         raise ValueError(f"unknown vehicle '{vid}'")
     return vid
+
+
+def receive(data: bytes | str, source: str, max_size: int) -> LiveSession:
+    """A packet as it arrived from `source` (the sender's IP): rate limited, size checked, then applied."""
+    if not packets_per_ip.allow(source) or not packets_total.allow():
+        raise Throttled("Too many packets; slow down")
+    if len(data) > max_size:
+        raise LiveError(f"Packet too large (limit {max_size} bytes)")
+    packet = json.loads(data)
+    if not isinstance(packet, dict):
+        raise LiveError("A packet is a JSON object")
+    return ingest(packet)
 
 
 def ingest(packet: dict) -> LiveSession:
@@ -355,6 +394,7 @@ def record(session: LiveSession) -> str:
         cols = session.vehicles["rocket"]
         meta["events"] = session.events
         meta["summary"] = summarize(cols, session.events)
+    prune_recordings(keep=RECORDINGS_KEPT - 1)
     save_replay(frame, REPLAYS_DIR / f"{replay_id}.parquet")
     save_metadata(meta, REPLAYS_DIR / f"{replay_id}.meta.json")
     if session.domain == "f1":
@@ -362,6 +402,15 @@ def record(session: LiveSession) -> str:
         laps = sorted(session.laps.values(), key=lambda l: (l["lap_end"] is None, l["lap_end"] or 0))
         (REPLAYS_DIR / f"{replay_id}.laps.json").write_text(json.dumps(laps, indent=2))
     return replay_id
+
+
+def prune_recordings(keep: int) -> None:
+    """Delete the oldest live recordings beyond `keep`, so senders can't fill the disk."""
+    metas = sorted(REPLAYS_DIR.glob("live_*.meta.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for meta_path in metas[max(keep, 0):]:
+        replay_id = meta_path.name.removesuffix(".meta.json")
+        for suffix in (".laps.json", ".parquet", ".meta.json"):
+            (REPLAYS_DIR / f"{replay_id}{suffix}").unlink(missing_ok=True)
 
 
 class UdpIngest(asyncio.DatagramProtocol):
@@ -374,8 +423,17 @@ class UdpIngest(asyncio.DatagramProtocol):
         self.transport = transport
 
     def datagram_received(self, data: bytes, addr):
+        if len(data) > MAX_DATAGRAM:
+            return
+        # An IPv4 sender on a dual-stack socket shows up as ::ffff:a.b.c.d; limits go by a.b.c.d,
+        # the same address its HTTP requests and WebSocket come from
+        source = addr[0].removeprefix("::ffff:")
         try:
-            ingest(json.loads(data.decode("utf-8")))
+            receive(data, source, MAX_DATAGRAM)
         except (LiveError, ValueError, UnicodeDecodeError) as err:
-            # Senders may ignore this; it's there for debugging a new sender
-            self.transport.sendto(json.dumps({"error": str(err)}).encode(), addr)
+            # For debugging a new sender. A UDP source address can be forged, so a reply is never
+            # bigger than the datagram that caused it, and each address gets only a few a second:
+            # the server can't be used to flood someone else.
+            reply = json.dumps({"error": str(err)}).encode()
+            if len(reply) <= len(data) and udp_replies.allow(source):
+                self.transport.sendto(reply, addr)

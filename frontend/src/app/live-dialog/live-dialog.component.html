@@ -1,0 +1,122 @@
+<div class="backdrop" (click)="close.emit()"></div>
+
+<div class="panel" role="dialog" aria-label="Go live">
+  <div class="head">
+    <h2>Go live</h2>
+    <button type="button" class="close" (click)="close.emit()" aria-label="Close">✕</button>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" [class.on]="tab() === 'demo'" [attr.aria-selected]="tab() === 'demo'" (click)="setTab('demo')">
+      Watch a demo
+    </button>
+    <button role="tab" [class.on]="tab() === 'send'" [attr.aria-selected]="tab() === 'send'" (click)="setTab('send')">
+      Send your own
+    </button>
+  </div>
+
+  @if (tab() === 'demo') {
+    <p class="hint">The server streams a flight or a race live, the way a sender would. Anyone with its code can watch along.</p>
+    <label class="field">
+      <span>Stream</span>
+      <select [value]="source()" (change)="chooseSource(valueFrom($event))">
+        <optgroup label="Rocket flight (simulated)">
+          @for (r of rockets(); track r.id) {
+            <option [value]="'rocket:' + r.id" [selected]="'rocket:' + r.id === source()">{{ r.name }} · {{ r.motor.designation }}</option>
+          }
+        </optgroup>
+        @if (races().length) {
+          <optgroup label="F1 (first 10 minutes)">
+            @for (r of races(); track r.id) {
+              <option [value]="'f1:' + r.id" [selected]="'f1:' + r.id === source()">{{ r.year }} {{ r.event }} · {{ r.session }}</option>
+            }
+          </optgroup>
+        }
+      </select>
+    </label>
+    <label class="field">
+      <span>Speed</span>
+      <select (change)="speed.set(+valueFrom($event))">
+        @for (s of speeds; track s) {
+          <option [value]="s" [selected]="s === speed()">{{ s === 1 ? 'Real time' : s + '× real time' }}</option>
+        }
+      </select>
+    </label>
+    @if (error(); as message) {
+      <p class="error">{{ message }}</p>
+    }
+    <div class="actions">
+      <button type="button" class="primary" [disabled]="busy() || !source()" (click)="startDemo()">
+        {{ busy() ? 'Starting…' : 'Start and watch' }}
+      </button>
+    </div>
+  } @else if (session()) {
+    @let s = session()!;
+    <div class="session">
+      <div>
+        <span class="label">Code (share it)</span>
+        <strong class="code">{{ s.code }}</strong>
+      </div>
+      <div class="secret">
+        <span class="label">Key (keep it secret)</span>
+        <code>{{ s.key }}</code>
+        <button type="button" (click)="copy('key', s.key)">{{ copied() === 'key' ? 'Copied' : 'Copy' }}</button>
+      </div>
+    </div>
+
+    @if (s.udp_port) {
+      <h3>Send UDP to <code>{{ host }}:{{ s.udp_port }}</code></h3>
+      <p class="hint">One JSON packet per datagram, each carrying the code and key. Try it from a terminal:</p>
+      <div class="snippet">
+        <pre>{{ netcat() }}</pre>
+        <button type="button" (click)="copy('nc', netcat())">{{ copied() === 'nc' ? 'Copied' : 'Copy' }}</button>
+      </div>
+    } @else {
+      <h3>Send over a WebSocket to <code>{{ websocketUrl() }}</code></h3>
+      <p class="hint">This server doesn't take UDP. Send each JSON packet as a text message, or run
+        <code>telemetry-live relay</code> next to a UDP sender to forward it.</p>
+      <div class="snippet">
+        <pre>{{ packet() }}</pre>
+        <button type="button" (click)="copy('packet', packet())">{{ copied() === 'packet' ? 'Copied' : 'Copy' }}</button>
+      </div>
+    }
+
+    <h3>Or pipe samples in with <code>telemetry-live</code></h3>
+    <p class="hint">One JSON sample per line, sent as it arrives. Install with
+      <code>pip install "git+{{ repo }}"</code> (Python 3.10+).</p>
+    <div class="snippet">
+      <pre>{{ cli() }}</pre>
+      <button type="button" (click)="copy('cli', cli())">{{ copied() === 'cli' ? 'Copied' : 'Copy' }}</button>
+    </div>
+    <p class="hint">Samples need <code>time</code>, <code>x</code>, <code>y</code>, <code>z</code> (s and m, z up); see the
+      <a [href]="repo + '/blob/main/docs/live-protocol.md'" target="_blank" rel="noopener">live protocol</a> for the rest.
+      Send <code>"end": true</code> to finish; the stream is then saved as a replay. A session nobody sends to for 10 minutes closes.</p>
+
+    <div class="actions">
+      <button type="button" (click)="session.set(null)">Start another</button>
+      <button type="button" class="primary" (click)="watch.emit('live:' + s.code)">Watch it</button>
+    </div>
+  } @else {
+    <p class="hint">Stream from your own flight computer, phone or script. The viewer draws your flight as one of the site's rockets.</p>
+    <label class="field">
+      <span>Draw it as</span>
+      <select [value]="design()" (change)="design.set(valueFrom($event))">
+        @for (r of rockets(); track r.id) {
+          <option [value]="r.id" [selected]="r.id === design()">{{ r.name }} · {{ r.length }} m</option>
+        }
+      </select>
+    </label>
+    <label class="field">
+      <span>Name for viewers (optional)</span>
+      <input [value]="name()" (input)="name.set(valueFrom($event))" maxlength="60" placeholder="My launch" />
+    </label>
+    @if (error(); as message) {
+      <p class="error">{{ message }}</p>
+    }
+    <div class="actions">
+      <button type="button" class="primary" [disabled]="busy() || !design()" (click)="startSession()">
+        {{ busy() ? 'Starting…' : 'Get a session' }}
+      </button>
+    </div>
+  }
+</div>

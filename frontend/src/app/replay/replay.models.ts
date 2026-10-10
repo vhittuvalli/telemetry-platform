@@ -229,5 +229,21 @@ export interface LiveSessionInfo {
   ended: boolean;
   replay_id: string | null;
   age: number; // s since it started
+  demo?: boolean; // streamed by the server itself
   meta?: Record<string, unknown>;
+}
+
+/** A session started from the site: share the code, keep the key for the sender. */
+export interface NewLiveSession {
+  code: string;
+  key: string;
+  udp_port: number | null; // null: the server takes WebSocket only
+  protocol_version: number;
+  max_samples: number;
+}
+
+export interface DemoRequest {
+  rocket?: string;  // a design to simulate and stream
+  replay?: string;  // or a built F1 replay
+  speed: number;
 }

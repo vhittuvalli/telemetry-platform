@@ -26,6 +26,15 @@ viewer, and when the stream ends it is saved as a replay.
 launch CG, nose, body tubes, fins, motor, recovery). The easiest way to produce it is
 `telemetry.rocket.replay.flight_metadata()`, as `scripts/stream_rocket.py` does.
 
+If your rocket doesn't need to look like itself, skip the geometry: name one of the site's
+designs (`GET /rockets` lists them) and the server fills in `meta.rocket` and `meta.launch`:
+
+```json
+{ "domain": "rocket", "rocket": "chute_release", "meta": { "session": { "event": "My rocket" } } }
+```
+
+The site's **Go live** panel starts a session this way and shows its code and key.
+
 For an F1 session, `domain` is `"f1"` and `meta` carries the field and the track, as in
 an F1 replay's metadata:
 
@@ -46,6 +55,9 @@ The response:
 ```json
 { "code": "K7Q4MX", "key": "3fZ…", "udp_port": 9870, "protocol_version": 1 }
 ```
+
+`udp_port` is the port to send UDP to on the site's own host, or `null` when the server
+can't take UDP (e.g. on Render); send over a WebSocket then.
 
 Share the **code**: viewers watch at `https://<site>/?live=K7Q4MX`, or type it into
 the session picker. Keep the **key** secret: every packet must carry it.
@@ -87,23 +99,48 @@ Each packet is one JSON object:
 
 ### Over UDP
 
-Send each packet as one datagram to the server's `udp_port`, and keep it under about
-**1,200 bytes** so it isn't fragmented (a few samples per packet). The server replies
-only when it rejects a packet, with `{"error": "…"}`.
+Send each packet as one datagram to the site's host at `udp_port` (e.g.
+`telemetry.example.com:9870`), and keep it under about **1,200 bytes** so it isn't
+fragmented (a few samples per packet; datagrams over 8 KB are dropped). The server replies
+only when it rejects a packet, with `{"error": "…"}`, and only when that reply is no bigger
+than your packet. Pad a test packet if you want to see errors while debugging.
 
-Web hosts such as Render accept only HTTP, so UDP can't reach them directly. Run the
-relay next to your sender; it listens for UDP and forwards over a WebSocket:
+UDP is not encrypted: the key travels in the clear. If that matters, use the WebSocket
+over `wss://`.
+
+Web hosts such as Render accept only HTTP, so UDP can't reach them directly (`udp_port` is
+`null`). Run the relay next to your sender; it listens for UDP and forwards over a WebSocket:
 
 ```bash
-python scripts/telemetry_relay.py --site https://telemetry-platform.onrender.com   # listens on UDP 9870
+telemetry-live relay --site https://telemetry-platform.onrender.com              # listens on UDP 9870
+python scripts/telemetry_relay.py --site https://telemetry-platform.onrender.com # the same, from a checkout
 ```
 
 Then send your UDP packets to the relay's machine, port 9870.
 
 ### Over a WebSocket
 
-Connect to `wss://<site>/live/ingest` and send each packet as a text message. Same
-format; errors come back as `{"error": "…"}` messages.
+Connect to `wss://<site>/live/ingest` and send each packet as a text message (up to
+64 KB). Same format; errors come back as `{"error": "…"}` messages.
+
+### With `telemetry-live`
+
+`pip install "git+https://github.com/vhittuvalli/telemetry-platform"` (Python 3.10+) installs a
+sender that does the packets for you. Give it samples, one JSON object per line (or a CSV with a
+header row); a line with an `event` key is a flight event:
+
+```bash
+ground_station | telemetry-live send - --rocket chute_release --site https://<site>   # live, as lines arrive
+telemetry-live send flight.csv --rocket chute_release --site https://<site>          # a recording, paced by time
+telemetry-live send - --session K7Q4MX --key 3fZ… --site https://<site>              # a session from Go live
+```
+
+## Demo streams
+
+`POST /live/demo` with `{"rocket": "<design>"}` (a simulated flight) or `{"replay": "<built F1
+replay>"}` (its first 10 minutes), and `"speed"` from 1 to 20, has the server stream it into a new
+live session itself. The response has the `code` to watch; the session lists with `"demo": true`.
+A server runs 3 demos at once (`LIVE_MAX_DEMOS`); they count toward the starting address's sessions.
 
 ## Watching (for viewers other than the web app)
 
@@ -118,7 +155,11 @@ the recording's `replay_id`.
   (ten minutes at 100 Hz); an F1 session keeps 450,000 (a full race; Monza 2024 is 360,000).
 - Live F1 views show the track, cars and leaderboard; the pit lane and starting grid are
   worked out from a whole session, so they appear in the recording, not live.
-- At most 20 live sessions at once per server.
+- At most 20 live sessions at once per server, and 3 open at once from one IP address.
+  Starting a session is limited to 6 at once per address, then one every 2 minutes (HTTP 429).
+- 500 packets a second per sender address (bursts of 1,000); packets over the limit are dropped.
+- 100 viewers per session. A server keeps its 100 newest live recordings.
+- These are defaults; a server's operator can change them (docs/self-hosting.md).
 
 ## A minimal sender
 
@@ -137,6 +178,6 @@ for seq in range(500):
     t = seq * 0.02
     sample = {"time": t, "x": 0, "y": 0, "z": 50 * math.sin(t / 3)}
     packet = {"v": 1, "session": s["code"], "key": s["key"], "seq": seq, "samples": [sample], "end": seq == 499}
-    sock.sendto(json.dumps(packet).encode(), ("127.0.0.1", 9870))
+    sock.sendto(json.dumps(packet).encode(), ("localhost", s["udp_port"]))  # the site's host
     time.sleep(0.02)
 ```
