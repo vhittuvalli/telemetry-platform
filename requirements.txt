@@ -18,7 +18,7 @@ httptools==0.8.0
 idna==3.20
 kiwisolver==1.5.1
 matplotlib==3.11.2
-msgpack==1.1.2
+msgpack==1.2.1
 numpy==2.5.3
 packaging==26.3
 pandas==2.3.3
