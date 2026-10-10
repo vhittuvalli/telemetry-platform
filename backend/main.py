@@ -4,6 +4,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from backend import demos
+from backend.limits import BodySizeLimit
 from backend.routers import catalog, live, replays, rockets
 """don't store replay endpoints here use a
 router so its easier to compile in main.py"""
@@ -21,6 +23,7 @@ FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", Path(__file__).resolve().pare
 async def lifespan(app: FastAPI):
     udp = await live.start_udp()
     yield
+    await demos.stop_all()
     if udp:
         udp.close()
 
@@ -32,6 +35,7 @@ app.include_router(catalog.builds_router)
 app.include_router(rockets.router)
 app.include_router(live.router)
 app.add_middleware(GZipMiddleware, minimum_size=1000) #compress API responses
+app.add_middleware(BodySizeLimit, max_bytes=1024 * 1024) #no request needs more; keeps anyone from sending huge bodies
 
 app.add_middleware(
     CORSMiddleware,

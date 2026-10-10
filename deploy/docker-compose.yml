@@ -1,0 +1,43 @@
+# The whole site on one machine that accepts UDP (e.g. an Oracle Cloud Always Free VM).
+# See docs/self-hosting.md.
+#
+#   DOMAIN=203-0-113-7.sslip.io docker compose -f deploy/docker-compose.yml up -d --build
+#
+# Caddy serves HTTPS on 80/443 and proxies to the app. The app's HTTP port is not published:
+# only Caddy can reach it, so the client IPs it forwards (used for rate limits) can't be forged.
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    ports:
+      - "9870:9870/udp"          # live telemetry, straight from any sender
+    environment:
+      ALLOW_BUILDS: "true"
+      ALLOW_MONTE_CARLO: "false" # a process per CPU; turn on if the machine has the memory
+      CORS_ORIGINS: ""
+    volumes:
+      - data:/data               # built replays and live recordings survive restarts
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 3g
+    pids_limit: 512
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to the site's hostname, e.g. 203-0-113-7.sslip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data         # TLS certificates
+      - caddy_config:/config
+    depends_on: [app]
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:

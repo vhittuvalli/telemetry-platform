@@ -38,6 +38,30 @@ def flight_frame(flight: Flight) -> pd.DataFrame:
     return frame.round(5)
 
 
+def rocket_metadata(rocket: Rocket, rocket_id: str | None = None) -> dict:
+    """The rocket's geometry, as a replay's (or a live session's) `meta.rocket`: what the viewer builds its model from."""
+    motor = rocket.motor
+    return {
+        "id": rocket_id,  # the definition in rockets/ it was flown from
+        "name": rocket.name,
+        "length": round(rocket.length, 4),
+        "diameter": round(rocket.diameter, 4),
+        "cg": round(rocket.mass_properties(0)[1], 4),  # the point the flight's position tracks
+        "nose": asdict(rocket.nose),
+        "body_tubes": [asdict(b) for b in rocket.body_tubes],
+        "fins": [asdict(f) for f in rocket.fins],
+        "motor": {
+            "designation": motor.designation, "manufacturer": motor.manufacturer,
+            "diameter": motor.diameter, "length": motor.length,
+            "total_impulse": round(motor.total_impulse, 2), "burn_time": round(motor.burn_time, 3),
+            "max_thrust": round(max(motor.thrusts), 2),
+            "aft_position": rocket.motor_aft,
+            "ejection_delay": rocket.ejection_delay,
+        },
+        "recovery": [asdict(r) for r in rocket.recovery],
+    }
+
+
 def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: datetime | None = None,
                     rocket_id: str | None = None, name: str | None = None) -> dict:
     when = when or datetime.now(timezone.utc)
@@ -47,36 +71,17 @@ def flight_metadata(rocket: Rocket, launch: Launch, flight: Flight, when: dateti
         i = min(range(len(c["time"])), key=lambda k: abs(c["time"][k] - e.time))
         events.append({"name": e.name, "time": e.time, "x": round(c["x"][i], 2), "y": round(c["y"][i], 2),
                        "z": round(e.altitude, 2)})
-    motor = rocket.motor
     return {
         "domain": "rocket",
         "session": {
             "year": when.year,
             "event": rocket.name,
             "location": launch.site_name,
-            "name": name or f"{motor.designation} flight",
+            "name": name or f"{rocket.motor.designation} flight",
             "date": when.replace(microsecond=0, tzinfo=None).isoformat(),
         },
         "time_range": {"start": 0.0, "end": round(c["time"][-1], 3)},
-        "rocket": {
-            "id": rocket_id,  # the definition in rockets/ it was flown from
-            "name": rocket.name,
-            "length": round(rocket.length, 4),
-            "diameter": round(rocket.diameter, 4),
-            "cg": round(rocket.mass_properties(0)[1], 4),  # the point the flight's position tracks
-            "nose": asdict(rocket.nose),
-            "body_tubes": [asdict(b) for b in rocket.body_tubes],
-            "fins": [asdict(f) for f in rocket.fins],
-            "motor": {
-                "designation": motor.designation, "manufacturer": motor.manufacturer,
-                "diameter": motor.diameter, "length": motor.length,
-                "total_impulse": round(motor.total_impulse, 2), "burn_time": round(motor.burn_time, 3),
-                "max_thrust": round(max(motor.thrusts), 2),
-                "aft_position": rocket.motor_aft,
-                "ejection_delay": rocket.ejection_delay,
-            },
-            "recovery": [asdict(r) for r in rocket.recovery],
-        },
+        "rocket": rocket_metadata(rocket, rocket_id),
         "launch": asdict(launch),
         "events": events,
         "summary": flight.summary(),

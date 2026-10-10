@@ -22,6 +22,7 @@ export class RacePickerComponent implements OnInit, OnDestroy {
   select = output<string>();
   close = output<void>();
   built = output<void>(); // a new replay finished building
+  goLive = output<'demo' | 'send'>(); // open the Go live dialog
 
   protected buildsEnabled = signal(false);
   protected seasons = signal<number[]>([]);

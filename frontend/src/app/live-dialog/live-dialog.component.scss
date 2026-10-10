@@ -1,0 +1,126 @@
+:host {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  font: 13px system-ui, sans-serif;
+  color: #fff;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.panel {
+  position: relative;
+  width: min(600px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  background: rgba(15, 15, 15, 0.95);
+  border-radius: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h2 { margin: 0; font-size: 18px; }
+h3 { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+
+.tabs {
+  display: flex;
+  gap: 6px;
+
+  button.on { background: #555; }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  > span { color: #c3c2b7; font-size: 12px; }
+}
+
+select, button, input {
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font: inherit;
+}
+
+select, button {
+  cursor: pointer;
+
+  &:hover:not(:disabled) { background: #444; }
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+.hint { margin: 0; color: #aaa; line-height: 1.45; }
+.hint a { color: #8ab8f0; }
+
+.error {
+  margin: 0;
+  color: #ff8a80;
+}
+
+code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #2a2a2a;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.session {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: flex-end;
+
+  > div { display: flex; flex-direction: column; gap: 4px; }
+  .label { color: #c3c2b7; font-size: 12px; }
+  .code { font-size: 22px; letter-spacing: 0.12em; color: #ff5a4f; }
+  .secret { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .secret .label { flex-basis: 100%; }
+}
+
+.snippet {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+
+  pre {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #1e1e1e;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+
+  .primary { background: #e10600; }
+  .primary:hover:not(:disabled) { background: #f41d16; }
+}

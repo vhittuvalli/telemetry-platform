@@ -125,6 +125,13 @@ takes about a minute to wake it), and has no persistent disk. What that means he
 - **Monte Carlo runs on request are off** (`ALLOW_MONTE_CARLO=false`); they need
   more memory. Flights with landing zones built locally with `--monte-carlo` still show them.
 
+### Your own server, with public UDP (free)
+
+Render can't take UDP, so senders there need a relay or a WebSocket. To let anyone send
+UDP straight to the site, run it on a free Oracle Cloud VM (or any VPS) with
+`deploy/setup-vm.sh`: Docker Compose with HTTPS via Caddy, UDP on port 9870, and rate
+limits for a public server. See [docs/self-hosting.md](docs/self-hosting.md).
+
 ### Anywhere else
 
 ```bash
@@ -144,6 +151,7 @@ the FastF1 cache and built replays, which are slow to recreate.
 | `ALLOW_MONTE_CARLO`  | same as `ALLOW_BUILDS`   | `false` turns off Monte Carlo runs on request         |
 | `MONTE_CARLO_WORKERS`| CPU count                | Processes for Monte Carlo runs                       |
 | `LIVE_UDP_PORT`      | `9870`                   | UDP port for live telemetry (empty turns it off)     |
+| `LIVE_*`             |                          | Limits for live senders and demos; see [docs/self-hosting.md](docs/self-hosting.md#security) |
 | `CORS_ORIGINS`       | `http://localhost:4200`  | Comma-separated origins, only if the frontend is hosted separately |
 
 Notes:
@@ -202,16 +210,35 @@ Stream a flight to the platform while it happens, the way a flight computer send
 telemetry to a ground station. Anyone with the session's code watches it live in the
 3D viewer; when the stream ends it's saved as a replay.
 
+**From the site:** open the session picker and choose **Watch a demo** (the server streams a
+simulated flight or the start of a race) or **Send your own**, which starts a session drawn as
+one of the site's rockets and shows its code, key, where to send UDP and a one-line `nc` test.
+
+**Without cloning the repo:** install the sender, then pipe samples to it (one JSON object per
+line, or a CSV file) as your flight computer produces them:
+
+```bash
+pip install "git+https://github.com/vhittuvalli/telemetry-platform"   # Python 3.10+, needs only websockets
+telemetry-live designs --site https://<site>
+ground_station | telemetry-live send - --rocket chute_release --site https://<site>
+telemetry-live send flight.csv --rocket chute_release --site https://<site>
+telemetry-live relay --site https://<site>   # forward UDP from this network to a site that takes only HTTP
+```
+
+**From a checkout**, the scripts simulate and stream whole flights and races:
+
 ```bash
 # the simulator as a live rocket: UDP to a server running on this machine
 python scripts/stream_rocket.py rockets/dual_parachute_deployment.json
 
-# to the deployed site: web hosts only accept HTTP, so relay UDP over a WebSocket
-python scripts/telemetry_relay.py --site https://telemetry-platform.onrender.com
-python scripts/stream_rocket.py rockets/chute_release.json --site https://telemetry-platform.onrender.com
+# to a self-hosted site (docs/self-hosting.md): UDP goes straight to the site's port 9870
+python scripts/stream_rocket.py rockets/chute_release.json --site https://<your-site>
 
-# or skip UDP and send straight over a WebSocket
-python scripts/stream_rocket.py rockets/chute_release.json --site https://telemetry-platform.onrender.com --websocket
+# to Render, which only accepts HTTP: the streamer falls back to a WebSocket,
+# or relay UDP from your machine over a WebSocket
+python scripts/stream_rocket.py rockets/chute_release.json --site https://telemetry-platform.onrender.com
+python scripts/telemetry_relay.py --site https://telemetry-platform.onrender.com
+python scripts/stream_rocket.py rockets/chute_release.json --site https://telemetry-platform.onrender.com --udp 127.0.0.1:9870
 
 # another motor, wind and rail angle
 python scripts/stream_rocket.py rockets/chute_release.json --motor aerotech_g80t.eng --wind 6 --wind-from 270
