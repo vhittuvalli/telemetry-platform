@@ -383,6 +383,7 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
     pending = list(rocket.recovery)
     opening = []  # (time it opens, device) for triggered devices still inside their deploy delay
     swing: Swing | None = None
+    hang = None  # (orientation at deployment, when, how long): the rocket turning to hang under its canopy
     phase = "rail"  # rail -> flight -> descent -> landed
     lifted = False
     t = 0.0
@@ -396,8 +397,8 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
         pos, vel, q, omega = s[0:3], s[3:6], s[6:10], s[10:13]
         accel, _, aux = model.forces(t, pos, vel, q, omega)
         if swing:
-            # The simulated point is the canopy and rocket together; the rocket hangs below the canopy
-            pos, q = add(pos, swing.offset()), lean_toward(swing.axis())
+            # The simulated point is straight below the canopy; the rocket swings around it
+            pos = add(pos, swing.offset())
         if phase == "rail":
             accel = scale(rail, dot(accel, rail)) if lifted else (0.0, 0.0, 0.0)
             aux["acceleration"] = norm(accel)
@@ -411,7 +412,10 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
         last_record = t
 
     def deploy(device, t, s):
-        nonlocal swing
+        """Open a recovery device; returns how far to move the simulated point so the rocket itself
+        doesn't jump (the point sits below the canopy, and the rocket hangs off to the side of it)."""
+        nonlocal swing, hang
+        before = swing.offset() if swing else (0.0, 0.0, 0.0)
         canopy = Canopy(device, t, norm(sub(s[3:6], model.wind.at(s[2], t))))
         model.canopies.append(canopy)
         event(f"deploy:{device.name}", t, s[2])
@@ -423,8 +427,11 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
             lean = math.atan2(math.hypot(ax[0], ax[1]), max(ax[2], 0.0))
             k = math.sin(min(lean, math.radians(60))) / max(math.hypot(ax[0], ax[1]), 1e-9)
             swing = Swing(length, (math.asin(ax[0] * k), math.asin(ax[1] * k)) if lean > 1e-6 else (0.0, 0.0))
+            # The opening canopy pulls the rocket round to hang under it as it fills, not in an instant
+            hang = (s[6:10], t, min(max(2 * canopy.fill_time, 0.8), 2.0))
         else:
             swing.length = length
+        return sub(before, swing.offset())
 
     record(t, state)
     while t < max_time:
@@ -479,7 +486,8 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
                 opening.append((t + device.deploy_delay, device))
         for when, device in list(opening):
             if t >= when:
-                deploy(device, t, state)
+                shift = deploy(device, t, state)
+                state = (*add(state[0:3], shift), *state[3:])
                 opening.remove((when, device))
                 phase = "descent"
 
@@ -487,7 +495,11 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
             # The canopy carries the rocket: swing it under the canopy as the canopy is pushed around
             pivot_accel = ((state[3] - prev[3]) / step, (state[4] - prev[4]) / step)
             swing.step(step, pivot_accel)
-            state = (*state[0:6], *lean_toward(swing.axis()), 0.0, 0.0, 0.0)
+            q = lean_toward(swing.axis())
+            if hang and t < hang[1] + hang[2]:
+                f = (t - hang[1]) / hang[2]
+                q = qslerp(hang[0], q, f * f * (3 - 2 * f))
+            state = (*state[0:6], *q, 0.0, 0.0, 0.0)
         else:
             state = (*state[0:6], *qnormalize(state[6:10]), *state[10:13])
 

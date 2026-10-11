@@ -433,6 +433,8 @@ export class RocketScene implements SceneModule {
     this.meta.rocket.recovery.forEach((device, i) => {
       const deployed = deploys.find((e) => e.name === `deploy:${device.name}`);
       chutes[i].visible = !!deployed && t >= deployed.time && !(t >= this.meta.time_range.end);
+      // It streams out of the tube and fills over about half a second, as the simulation has it
+      if (deployed) chutes[i].scale.setScalar(Math.max(0.05, THREE.MathUtils.smoothstep(t - deployed.time, 0, 0.6)));
     });
 
     // Trail up to now
@@ -559,18 +561,26 @@ export class RocketScene implements SceneModule {
     // Chase: held at a bearing from the rocket by a stiff spring, so when the motor kicks the
     // rocket pulls away and the camera catches up (and drifts ahead as drag slows it after
     // burnout). The lag comes from the flight's own acceleration, so it's right at any speed or seek.
-    // Under a parachute, frame the canopy and the rocket hanging from it, not just the rocket
-    const deployed = this.meta.events.filter((e) => e.name.startsWith('deploy:') && e.time <= t)
-      .map((e) => this.meta.rocket.recovery.find((r) => `deploy:${r.name}` === e.name)?.diameter ?? 0);
-    const canopy = deployed.length ? Math.max(...deployed) : 0;
-    const rig = canopy ? canopy * 1.1 + this.meta.rocket.cg + canopy * 0.3 : 0; // lines, rocket above its CG, canopy
+    // Under a parachute, frame the canopy and the rocket hanging from it, not just the rocket,
+    // easing over to it as each canopy opens so the view doesn't jump
+    const deploys = this.meta.events.filter((e) => e.name.startsWith('deploy:') && e.time <= t);
+    let rig = 0;      // m from the rocket's CG up to the top of the largest open canopy
+    let opened = 0;   // 0 before the first canopy, easing to 1 as it opens
+    for (const e of deploys) {
+      const diameter = this.meta.rocket.recovery.find((r) => `deploy:${r.name}` === e.name)?.diameter ?? 0;
+      const w = THREE.MathUtils.smoothstep(t - e.time, 0, 1.2);
+      rig = Math.max(rig, (diameter * 1.4 + this.meta.rocket.cg) * w); // lines, canopy, rocket above its CG
+      opened = Math.max(opened, w);
+    }
     const target = Math.max(length * 4, rig * 2.6) + altitude * 0.02;
     this.followDistance = this.followInitialized
       ? THREE.MathUtils.lerp(this.followDistance, target, 1 - Math.exp(-2 * dt))
       : target;
     this.followInitialized = true;
     const lag = this.accelerationAt(t).add(new THREE.Vector3(0, 9.81, 0)).divideScalar(CHASE_OMEGA ** 2);
-    if (t <= (this.meta.events.find((e) => e.name === 'liftoff')?.time ?? 0)) lag.set(0, 0, 0);
+    // Only while flying free: on the pad there's nothing to lag, and under a canopy the opening
+    // shock would yank the camera (near apogee the lag is about zero anyway, so this doesn't jump)
+    if (t <= (this.meta.events.find((e) => e.name === 'liftoff')?.time ?? 0) || deploys.length) lag.set(0, 0, 0);
     lag.clampLength(0, Math.min(CHASE_MAX_LAG, this.followDistance * 1.2)); // pulls away, but not out of sight
     camera.position.copy(root.position).addScaledVector(FOLLOW_BEARING, this.followDistance).sub(lag);
     camera.position.y = Math.max(camera.position.y, 1.5);
@@ -590,9 +600,8 @@ export class RocketScene implements SceneModule {
     camera.updateProjectionMatrix();
     // Aim a little below the rocket: it rides in the upper part of the frame with its smoke trailing
     // beneath. Under a canopy, aim between the two so both are in view.
-    const aim = rig
-      ? root.position.clone().add(new THREE.Vector3(0, rig * 0.35, 0))
-      : root.position.clone().add(new THREE.Vector3(0, -this.followDistance * 0.3 * Math.min(altitude / 20, 1), 0)); // on the pad, the rocket itself
+    const below = -this.followDistance * 0.3 * Math.min(altitude / 20, 1); // on the pad, the rocket itself
+    const aim = root.position.clone().add(new THREE.Vector3(0, THREE.MathUtils.lerp(below, rig * 0.35, opened), 0));
     camera.lookAt(aim.add(shake));
   }
 
