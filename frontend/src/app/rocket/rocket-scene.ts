@@ -12,12 +12,18 @@ import { RocketState, RocketTrack } from './rocket-track';
 import { RocketModel, buildRocketModel } from './rocket-model';
 import { buildAltitudeRuler, buildLaunchSite, padLift } from './launch-site';
 import { buildLandingZone } from './landing-zone';
-import { Puff, Smoke, buildGlow, flicker } from './effects';
+import { AirMotes, Puff, Smoke, buildGlow, flicker } from './effects';
+import { Clouds, HAZE, buildSky, sunDirection } from './sky';
 
 type RocketCamera = 'follow' | 'ground' | 'overview' | 'landing';
 
 /** Where the follow camera sits relative to the rocket: to one side and a little below. */
 const FOLLOW_BEARING = new THREE.Vector3(0.7, -0.15, 0.7).normalize();
+/** How stiffly the chase camera holds its place: it trails by acceleration / ω², about 8 m at 5 g. */
+const CHASE_OMEGA = 2.5; // rad/s
+const CHASE_MAX_LAG = 25; // m
+/** Wind grows with height as (z / 10 m)^this, as in the simulator, for flights that don't say. */
+const DEFAULT_WIND_GRADIENT = 1 / 7;
 
 /** A small deterministic random generator, so smoke looks the same on every replay. */
 function mulberry(seed: number): () => number {
@@ -92,6 +98,9 @@ export class RocketScene implements SceneModule {
   private smoke?: Smoke;
   private glow?: THREE.Sprite;
   private nozzleLight?: THREE.PointLight;
+  private clouds?: Clouds;
+  private motes?: AirMotes;
+  private readonly sunDir = sunDirection();
   private followDistance = 0;
   private lastTime = 0;
   private latest?: RocketState;
@@ -217,14 +226,45 @@ export class RocketScene implements SceneModule {
     return p;
   }
 
+  /** The wind (scene axes, m/s) at height `z`, without gusts. */
+  private windAt(z: number): THREE.Vector3 {
+    const { wind_speed, wind_from } = this.meta.launch;
+    const gradient = (this.meta.launch as { wind_gradient?: number }).wind_gradient ?? DEFAULT_WIND_GRADIENT;
+    const speed = wind_speed * (gradient ? (Math.max(z, 0.5) / 10) ** gradient : 1);
+    const h = THREE.MathUtils.degToRad(wind_from);
+    return toScene([-speed * Math.sin(h), -speed * Math.cos(h), 0]);
+  }
+
   private buildStatic(): void {
-    const scene = this.engine.scene;
-    scene.fog = new THREE.Fog(0xd6e9f7, 3000, 30000); // matches the sky dome's horizon
-    this.engine.camera.far = 60000;
-    this.engine.camera.updateProjectionMatrix();
+    const engine = this.engine;
+    const scene = engine.scene;
+    // Filmic tone mapping for the sky's range of brightness, soft sun shadows, and a glow around the flame
+    // The sky is HDR (up to about 1.5, the sun far more); only the flame and the sun bloom
+    engine.setLook({ exposure: 0.5, shadows: true, bloom: { strength: 0.6, radius: 0.45, threshold: 6 } });
+    scene.fog = new THREE.Fog(HAZE, 2500, 32000); // the horizon's haze
+    engine.camera.far = 60000;
+    engine.camera.near = 0.05;
+    engine.camera.updateProjectionMatrix();
+    engine.add(buildSky(engine.renderer, scene));
+    scene.environmentIntensity = 0.3; // the sky's light fills shadows; the sun does the lighting
+
+    // Sunlight, with shadows in a box that follows the rocket (see updateSun)
+    engine.ambient.intensity = 0.15;
+    engine.sun.color.set(0xfff1de);
+    engine.sun.intensity = 3.2;
+    engine.sun.castShadow = true;
+    engine.sun.shadow.mapSize.set(2048, 2048);
+    engine.sun.shadow.bias = -0.0004;
+    engine.sun.shadow.normalBias = 0.02;
+    this.updateSun(new THREE.Vector3(0, 0, 0), 12);
+
+    this.clouds = new Clouds(this.windAt(1000));
+    engine.add(this.clouds.group);
+    this.motes = new AirMotes();
+    engine.add(this.motes.points);
 
     const g = this.meta.rocket;
-    this.engine.add(buildLaunchSite(this.railDirection(), this.meta.launch.rail_length, g.diameter));
+    engine.add(buildLaunchSite(this.railDirection(), this.meta.launch.rail_length, g.diameter, this.windAt(10)));
 
     this.model = buildRocketModel(g);
     this.engine.add(this.model.root);
@@ -319,16 +359,17 @@ export class RocketScene implements SceneModule {
     let t = liftoff;
     let last = nozzleAt(t);
     const step = 0.002; // s, fine enough to place puffs within a few cm of their spacing
-    while (t < smokeEnd && puffs.length < 8000) {
+    while (t < smokeEnd && puffs.length < 14000) {
       t += step;
       const here = nozzleAt(t);
       const burning = t <= burnout;
       if (last.distanceTo(here) < (burning ? 0.2 : 0.25)) continue;
       last = here;
       const jitter = new THREE.Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).multiplyScalar(size * 0.3);
+      // A motor's trail hangs in the sky for a good while, spreading and thinning as it goes
       puffs.push(burning
-        ? { position: here.clone().add(jitter), born: t, size, growth: 1.3, life: 11 + rand() * 3, rise: 0.15 }
-        : { position: here.clone().add(jitter), born: t, size: size * 0.7, growth: 0.9, life: 8 + rand() * 2, rise: 0.1 });
+        ? { position: here.clone().add(jitter), born: t, size, growth: 1.6, life: 22 + rand() * 6, rise: 0.15 }
+        : { position: here.clone().add(jitter), born: t, size: size * 0.7, growth: 1.0, life: 12 + rand() * 4, rise: 0.1 });
     }
 
     const { wind_speed, wind_from } = this.meta.launch;
@@ -379,7 +420,9 @@ export class RocketScene implements SceneModule {
     const d = this.meta.rocket.motor.diameter;
     this.glow!.visible = burning;
     this.glow!.scale.setScalar(d * (4 + 6 * Math.sqrt(thrust)) * wobble);
-    this.nozzleLight!.intensity = burning ? 40 * Math.sqrt(thrust) * wobble : 0;
+    this.nozzleLight!.intensity = burning ? 60 * Math.sqrt(thrust) * wobble : 0;
+    this.model.animate(performance.now() / 1000);
+    this.clouds?.update(t);
     this.smoke?.update(t, this.engine.camera, this.engine.renderer.getDrawingBufferSize(new THREE.Vector2()).y);
 
     // A jump in time is a seek: cameras snap instead of easing
@@ -398,7 +441,11 @@ export class RocketScene implements SceneModule {
 
     this.tag?.position.copy(root.position);
     this.updateLabels(t);
-    this.updateCamera(dt);
+    this.updateCamera(dt, t, state);
+    const viewport = this.engine.renderer.getDrawingBufferSize(new THREE.Vector2()).y;
+    this.motes?.update(this.engine.camera, this.mode() === 'follow' ? state.speed / 3.6 : 0, viewport);
+    // Shadows sharp around the rocket near the pad, covering more as the camera backs off
+    this.updateSun(root.position, Math.max(this.meta.rocket.length * 6, 12));
     this.latest = state; // published to the panels by syncUi
   }
 
@@ -446,7 +493,43 @@ export class RocketScene implements SceneModule {
     this.engine.frame(center, Math.max(0.5 * Math.hypot(size.x, size.z), 20), 80);
   }
 
-  private updateCamera(dt: number): void {
+  /** Keep the sun's shadow box centered on `at`, `half` meters each way. */
+  private updateSun(at: THREE.Vector3, half: number): void {
+    const sun = this.engine.sun;
+    sun.target.position.copy(at);
+    sun.position.copy(at).addScaledVector(this.sunDir, 300);
+    const cam = sun.shadow.camera;
+    if (cam.right !== half) {
+      cam.left = cam.bottom = -half;
+      cam.right = cam.top = half;
+      cam.near = 1;
+      cam.far = 700;
+      cam.updateProjectionMatrix();
+    }
+  }
+
+  /** The rocket's acceleration (scene axes, m/s²) around time `t`, averaged over the last few tenths of a second. */
+  private accelerationAt(t: number): THREE.Vector3 {
+    const track = this.track!;
+    const h = 0.05;
+    const p = (u: number) => {
+      const s = track.stateAt(Math.min(Math.max(u, track.start), track.end));
+      return toScene([s.x, s.y, s.z]);
+    };
+    const sum = new THREE.Vector3();
+    let weight = 0;
+    for (let k = 0; k < 5; k++) {
+      const u = t - k * 0.08;
+      const w = Math.exp(-k * 0.5);
+      const a = p(u + h).add(p(u - h)).addScaledVector(p(u), -2).divideScalar(h * h);
+      sum.addScaledVector(a, w);
+      weight += w;
+    }
+    track.stateAt(t); // leave the track's cursor where the frame is
+    return sum.divideScalar(weight);
+  }
+
+  private updateCamera(dt: number, t: number, state: RocketState): void {
     const root = this.model!.root;
     const camera = this.engine.camera;
     const mode = this.mode();
@@ -462,29 +545,55 @@ export class RocketScene implements SceneModule {
     root.scale.setScalar(1);
 
     if (mode === 'ground') {
-      // A tracking telescope: fixed spot, zooming so the rocket keeps a steady size
+      // A tracking telescope: fixed spot, zooming so the rocket keeps a steady size, but not so
+      // far that the frame is only sky: its smoke and the clouds around it show it moving
       camera.position.copy(this.groundCamera);
       const distance = camera.position.distanceTo(root.position);
-      const view = Math.max(length * 6, 6);
-      camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(view / 2 / distance)), 0.5, this.baseFov);
+      const view = Math.max(length * 14, 12);
+      camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(view / 2 / distance)), 2.5, this.baseFov);
       camera.updateProjectionMatrix();
       camera.lookAt(root.position);
       return;
     }
 
-    // Follow: locked to the rocket at a fixed bearing, so it can't fall behind; only the
-    // distance eases, backing off a little as the rocket climbs so the ground stays in view
-    const target = length * 4 + altitude * 0.02;
+    // Chase: held at a bearing from the rocket by a stiff spring, so when the motor kicks the
+    // rocket pulls away and the camera catches up (and drifts ahead as drag slows it after
+    // burnout). The lag comes from the flight's own acceleration, so it's right at any speed or seek.
+    // Under a parachute, frame the canopy and the rocket hanging from it, not just the rocket
+    const deployed = this.meta.events.filter((e) => e.name.startsWith('deploy:') && e.time <= t)
+      .map((e) => this.meta.rocket.recovery.find((r) => `deploy:${r.name}` === e.name)?.diameter ?? 0);
+    const canopy = deployed.length ? Math.max(...deployed) : 0;
+    const rig = canopy ? canopy * 1.1 + this.meta.rocket.cg + canopy * 0.3 : 0; // lines, rocket above its CG, canopy
+    const target = Math.max(length * 4, rig * 2.6) + altitude * 0.02;
     this.followDistance = this.followInitialized
       ? THREE.MathUtils.lerp(this.followDistance, target, 1 - Math.exp(-2 * dt))
       : target;
     this.followInitialized = true;
-    camera.position.copy(root.position).addScaledVector(FOLLOW_BEARING, this.followDistance);
+    const lag = this.accelerationAt(t).add(new THREE.Vector3(0, 9.81, 0)).divideScalar(CHASE_OMEGA ** 2);
+    if (t <= (this.meta.events.find((e) => e.name === 'liftoff')?.time ?? 0)) lag.set(0, 0, 0);
+    lag.clampLength(0, Math.min(CHASE_MAX_LAG, this.followDistance * 1.2)); // pulls away, but not out of sight
+    camera.position.copy(root.position).addScaledVector(FOLLOW_BEARING, this.followDistance).sub(lag);
     camera.position.y = Math.max(camera.position.y, 1.5);
-    // Aim a little below the rocket: it rides in the upper part of the frame with its smoke trailing beneath
-    camera.lookAt(root.position.clone().add(new THREE.Vector3(0, -this.followDistance * 0.3, 0)));
-    return;
-    camera.lookAt(root.position);
+
+    // Shake: the motor's rumble and buffeting at high dynamic pressure
+    const thrust = state.thrust / (this.meta.rocket.motor.max_thrust || 1);
+    const q = state.dynamic_pressure / Math.max(this.meta.summary.max_q, 1);
+    const s = performance.now() / 1000;
+    const amp = this.followDistance * (0.004 * Math.sqrt(Math.max(thrust, 0)) + 0.003 * q);
+    const shake = new THREE.Vector3(
+      Math.sin(s * 47) + 0.5 * Math.sin(s * 89 + 1), Math.sin(s * 53 + 2) + 0.5 * Math.sin(s * 97), Math.sin(s * 41 + 4),
+    ).multiplyScalar(amp);
+
+    // A wider view at speed, like a camera struggling to keep up
+    const speed = state.speed / 3.6;
+    camera.fov = this.baseFov + 10 * Math.min(speed / 150, 1);
+    camera.updateProjectionMatrix();
+    // Aim a little below the rocket: it rides in the upper part of the frame with its smoke trailing
+    // beneath. Under a canopy, aim between the two so both are in view.
+    const aim = rig
+      ? root.position.clone().add(new THREE.Vector3(0, rig * 0.35, 0))
+      : root.position.clone().add(new THREE.Vector3(0, -this.followDistance * 0.3 * Math.min(altitude / 20, 1), 0)); // on the pad, the rocket itself
+    camera.lookAt(aim.add(shake));
   }
 
   dispose(): void {

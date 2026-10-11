@@ -21,6 +21,7 @@ class Variation:
     mass: float = 0.02             # relative, dry mass
     parachute_cd: float = 0.07     # relative
     ejection_delay: float = 0.10   # relative (motor delay grains vary)
+    gusts: float = 1.0             # 1: each flight meets its own gusts; 0: the nominal flight's
 
 
 def perturb(rocket: Rocket, launch: Launch, v: Variation, rng: random.Random) -> tuple[Rocket, Launch]:
@@ -48,7 +49,7 @@ def perturb(rocket: Rocket, launch: Launch, v: Variation, rng: random.Random) ->
                         if rocket.ejection_delay is not None else None),
     )
     launch = replace(launch, wind_speed=wind, wind_from=launch.wind_from + g(0, v.wind_direction),
-                     angle=angle, heading=new_heading)
+                     angle=angle, heading=new_heading, turbulence_seed=rng.randrange(2 ** 31) if v.gusts else launch.turbulence_seed)
     return rocket, launch
 
 

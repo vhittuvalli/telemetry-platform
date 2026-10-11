@@ -6,6 +6,7 @@ rotating body vectors into the world frame. Roll is not modeled (no canted fins)
 """
 
 import math
+import random
 from dataclasses import dataclass, field
 
 from telemetry.rocket.atmosphere import G0, air_at
@@ -84,8 +85,11 @@ class Launch:
     rail_length: float = 1.0       # m
     angle: float = 0.0             # degrees from vertical
     heading: float = 0.0           # compass degrees the rail tilts toward
-    wind_speed: float = 0.0        # m/s
+    wind_speed: float = 0.0        # m/s, measured 10 m above the ground
     wind_from: float = 0.0         # compass degrees the wind blows from
+    wind_gradient: float = 1 / 7   # wind grows with height as (z / 10 m) ** this; 0 keeps it constant
+    turbulence: float = 0.1        # gusts' standard deviation, as a fraction of the wind speed
+    turbulence_seed: int = 0       # which gusts: the same seed flies the same flight
     site_name: str = "Launch site"
     site_altitude: float = 0.0     # m above sea level
     temperature: float = 288.15    # K at the site
@@ -93,6 +97,7 @@ class Launch:
 
     @property
     def wind(self):
+        """The wind at the reference height, without gusts."""
         h = math.radians(self.wind_from)
         return (-self.wind_speed * math.sin(h), -self.wind_speed * math.cos(h), 0.0)
 
@@ -100,6 +105,108 @@ class Launch:
     def rail_direction(self):
         e, h = math.radians(90 - self.angle), math.radians(self.heading)
         return (math.cos(e) * math.sin(h), math.cos(e) * math.cos(h), math.sin(e))
+
+
+class Wind:
+    """The wind at any height and time: a mean wind growing with height (the power law for open
+    country) plus gusts. Gusts are a sum of sine waves with random phases and a pink spectrum
+    (amplitude falling as 1/sqrt(frequency)), like OpenRocket's turbulence, seeded so a flight
+    replays the same. Vertical gusts are half as strong as those along the wind."""
+
+    REFERENCE_HEIGHT = 10.0                         # m, where wind_speed is measured
+    FREQUENCIES = [0.03 * 1.8 ** k for k in range(9)]  # Hz, 0.03 to 3.3
+    AXES = (1.0, 0.8, 0.5)                          # along the wind, across it, vertical
+
+    def __init__(self, launch: Launch):
+        h = math.radians(launch.wind_from)
+        self.along = (-math.sin(h), -math.cos(h), 0.0)
+        self.across = (-math.cos(h), math.sin(h), 0.0)
+        self.speed = launch.wind_speed
+        self.gradient = launch.wind_gradient
+        rng = random.Random(launch.turbulence_seed)
+        weights = [f ** -0.5 for f in self.FREQUENCIES]
+        norm_ = math.sqrt(sum(w * w for w in weights) / 2)  # a sine of amplitude a has std a/sqrt(2)
+        self.components = [
+            [(2 * math.pi * f, w / norm_ * launch.turbulence * k, rng.uniform(0, 2 * math.pi))
+             for f, w in zip(self.FREQUENCIES, weights)]
+            for k in self.AXES
+        ]
+
+    def mean_speed(self, z: float) -> float:
+        if not self.gradient:
+            return self.speed
+        return self.speed * (max(z, 0.5) / self.REFERENCE_HEIGHT) ** self.gradient
+
+    def at(self, z: float, t: float):
+        mean = self.mean_speed(z)
+        if mean == 0.0:
+            return (0.0, 0.0, 0.0)
+        g = [sum(a * math.sin(w * t + phase) for w, a, phase in axis) * mean for axis in self.components]
+        u, v = mean + g[0], g[1]
+        return (self.along[0] * u + self.across[0] * v, self.along[1] * u + self.across[1] * v, g[2])
+
+
+class Canopy:
+    """A recovery device opening: its drag area grows from nothing over the filling time, about
+    eight canopy diameters of travel at the opening speed (Knacke), which gives the opening shock."""
+
+    FILL_DIAMETERS = 8.0
+
+    def __init__(self, device, t: float, speed: float):
+        self.device = device
+        self.opened = t
+        self.fill_time = min(max(self.FILL_DIAMETERS * device.diameter / max(speed, 1.0), 0.1), 3.0)
+
+    def fill(self, t: float) -> float:
+        f = (t - self.opened) / self.fill_time
+        return 1.0 if f >= 1 else max(f, 0.0) ** 2
+
+    def drag_area(self, t: float) -> float:
+        return self.device.drag_area * self.fill(t)
+
+
+class Swing:
+    """The rocket hanging under its parachute as a damped pendulum from the canopy, pushed by gusts
+    and by the jerk of opening. `tilt` is the rocket's lean from vertical (radians, toward east and
+    north); the canopy is the pivot, so the rocket's CG swings `length` meters below it."""
+
+    DAMPING = 0.35  # 1/s: air resistance on the rocket and canopy; a swing halves in about 4 s
+
+    def __init__(self, length: float, tilt: tuple[float, float]):
+        self.length = max(length, 0.2)
+        self.tilt = list(tilt)
+        self.rate = [0.0, 0.0]
+
+    def step(self, dt: float, pivot_accel: tuple[float, float]) -> None:
+        # Small substeps: the pendulum (period ~2 s) is faster than the descent's time step
+        n = max(1, math.ceil(dt / 0.01))
+        h = dt / n
+        for _ in range(n):
+            for i in (0, 1):
+                acc = -(G0 / self.length) * math.sin(self.tilt[i]) - self.DAMPING * self.rate[i] \
+                      - pivot_accel[i] / self.length * math.cos(self.tilt[i])
+                self.rate[i] += acc * h
+                self.tilt[i] += self.rate[i] * h
+
+    def axis(self):
+        """The rocket's axis (nose direction): along the lines up to the canopy."""
+        x, y = math.sin(self.tilt[0]), math.sin(self.tilt[1])
+        return (x, y, math.sqrt(max(1.0 - x * x - y * y, 0.0)))
+
+    def offset(self):
+        """Where the CG hangs relative to straight below the canopy."""
+        ax = self.axis()
+        return scale(sub((0.0, 0.0, 1.0), ax), self.length)
+
+
+def lean_toward(axis):
+    """Quaternion turning body +z (the nose) to `axis`, a unit vector."""
+    cr = cross((0.0, 0.0, 1.0), axis)
+    s = norm(cr)
+    if s < 1e-9:
+        return UP
+    angle = math.atan2(s, axis[2])
+    return (math.cos(angle / 2), *scale(cr, math.sin(angle / 2) / s))
 
 
 # ---------- results ----------
@@ -168,8 +275,11 @@ class _Model:
     def __init__(self, rocket: Rocket, launch: Launch):
         self.rocket = rocket
         self.launch = launch
-        self.wind = launch.wind
-        self.descent_drag_area = 0.0  # sum of deployed recovery devices' Cd·A
+        self.wind = Wind(launch)
+        self.canopies: list[Canopy] = []  # recovery devices deployed so far
+
+    def canopy_drag_area(self, t: float) -> float:
+        return sum(c.drag_area(t) for c in self.canopies)
 
     def forces(self, t, pos, vel, q, omega):
         """Acceleration, angular acceleration and the quantities recorded each sample."""
@@ -177,7 +287,7 @@ class _Model:
         mass, cg, inertia = rocket.mass_properties(t)
         air = air_at(launch.site_altitude + pos[2], launch.temperature, launch.pressure)
         axis = rotate(q, (0.0, 0.0, 1.0))
-        v_air = sub(vel, self.wind)
+        v_air = sub(vel, self.wind.at(pos[2], t))
         speed = norm(v_air)
         qdyn = 0.5 * air.density * speed * speed
         thrust = rocket.motor.thrust(t)
@@ -189,12 +299,17 @@ class _Model:
         cn_alpha, cp = rocket.normal_force(mach)
         aoa = 0.0
 
+        under_canopy = bool(self.canopies)
         if speed > 1e-6:
-            # Under a parachute only the parachutes' drag counts, as in OpenRocket
-            drag_area = self.descent_drag_area or cd * rocket.reference_area
+            # Under an open parachute only the parachutes' drag counts, as in OpenRocket; while
+            # one fills, the rocket's own drag fades out as the canopy's grows
+            drag_area = cd * rocket.reference_area
+            if under_canopy:
+                fill = max(c.fill(t) for c in self.canopies)
+                drag_area = self.canopy_drag_area(t) + drag_area * (1 - fill)
             force = add(force, scale(v_air, -qdyn * drag_area / speed))
 
-            if not self.descent_drag_area:
+            if not under_canopy:
                 axial = dot(v_air, axis)
                 lateral = sub(v_air, scale(axis, axial))
                 lat = norm(lateral)
@@ -207,7 +322,7 @@ class _Model:
         # Pitch damping, in the body frame; roll is ignored
         body_torque = rotate(conj(q), torque)
         rate = math.hypot(omega[0], omega[1])
-        if rate > 1e-9 and not self.descent_drag_area:
+        if rate > 1e-9 and not under_canopy:
             damp = rocket.damping_moment(rate, air.density, cg)
             body_torque = add(body_torque, (damp * omega[0] / rate, damp * omega[1] / rate, 0.0))
         ang_acc = (body_torque[0] / inertia, body_torque[1] / inertia, 0.0)
@@ -267,6 +382,7 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
     ejection = burnout + rocket.ejection_delay if rocket.ejection_delay is not None else None
     pending = list(rocket.recovery)
     opening = []  # (time it opens, device) for triggered devices still inside their deploy delay
+    swing: Swing | None = None
     phase = "rail"  # rail -> flight -> descent -> landed
     lifted = False
     t = 0.0
@@ -279,6 +395,9 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
         nonlocal last_record
         pos, vel, q, omega = s[0:3], s[3:6], s[6:10], s[10:13]
         accel, _, aux = model.forces(t, pos, vel, q, omega)
+        if swing:
+            # The simulated point is the canopy and rocket together; the rocket hangs below the canopy
+            pos, q = add(pos, swing.offset()), lean_toward(swing.axis())
         if phase == "rail":
             accel = scale(rail, dot(accel, rail)) if lifted else (0.0, 0.0, 0.0)
             aux["acceleration"] = norm(accel)
@@ -291,13 +410,26 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
             columns[name].append(row[name])
         last_record = t
 
-    def deploy(device, t, z):
-        model.descent_drag_area += device.drag_area
-        event(f"deploy:{device.name}", t, z)
+    def deploy(device, t, s):
+        nonlocal swing
+        canopy = Canopy(device, t, norm(sub(s[3:6], model.wind.at(s[2], t))))
+        model.canopies.append(canopy)
+        event(f"deploy:{device.name}", t, s[2])
+        # The rocket hangs on lines about as long as the canopy is wide, from its nose
+        length = 1.1 * max(c.device.diameter for c in model.canopies) + rocket.mass_properties(t)[1]
+        if swing is None:
+            # It starts from however it was flying, at most 60° from hanging straight
+            ax = rotate(s[6:10], (0.0, 0.0, 1.0))
+            lean = math.atan2(math.hypot(ax[0], ax[1]), max(ax[2], 0.0))
+            k = math.sin(min(lean, math.radians(60))) / max(math.hypot(ax[0], ax[1]), 1e-9)
+            swing = Swing(length, (math.asin(ax[0] * k), math.asin(ax[1] * k)) if lean > 1e-6 else (0.0, 0.0))
+        else:
+            swing.length = length
 
     record(t, state)
     while t < max_time:
-        step = descent_dt if phase == "descent" else dt
+        inflating = any(c.fill(t) < 1 for c in model.canopies)
+        step = descent_dt if phase == "descent" and not inflating else dt
         prev = state
         state = _rk4(lambda tt, ss: model.derivative(tt, ss, phase == "rail"), t, state, step)
         t += step
@@ -347,18 +479,19 @@ def simulate(rocket: Rocket, launch: Launch, dt: float = 0.005, descent_dt: floa
                 opening.append((t + device.deploy_delay, device))
         for when, device in list(opening):
             if t >= when:
-                deploy(device, t, state[2])
+                deploy(device, t, state)
                 opening.remove((when, device))
                 phase = "descent"
 
         if phase == "descent":
-            # Under a parachute the rocket hangs nose-up; ease its orientation there
-            q = qslerp(state[6:10], UP, 1 - math.exp(-step / 1.5))
-            state = (*state[0:6], *q, 0.0, 0.0, 0.0)
+            # The canopy carries the rocket: swing it under the canopy as the canopy is pushed around
+            pivot_accel = ((state[3] - prev[3]) / step, (state[4] - prev[4]) / step)
+            swing.step(step, pivot_accel)
+            state = (*state[0:6], *lean_toward(swing.axis()), 0.0, 0.0, 0.0)
         else:
             state = (*state[0:6], *qnormalize(state[6:10]), *state[10:13])
 
-        if record_samples and t - last_record >= (0.05 if phase == "descent" else 0.01) - 1e-9:
+        if record_samples and t - last_record >= (0.05 if step == descent_dt else 0.01) - 1e-9:
             record(t, state)
 
     return Flight(columns, sorted(events, key=lambda e: e.time))
