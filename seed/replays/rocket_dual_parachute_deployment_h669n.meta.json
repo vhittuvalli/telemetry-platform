@@ -5,11 +5,11 @@
     "event": "Dual parachute deployment",
     "location": "Test range",
     "name": "H669N flight",
-    "date": "2026-10-10T22:21:54"
+    "date": "2026-10-11T02:45:53"
   },
   "time_range": {
     "start": 0.0,
-    "end": 65.309
+    "end": 65.39
   },
   "rocket": {
     "id": "dual_parachute_deployment",
@@ -134,44 +134,44 @@
     {
       "name": "apogee",
       "time": 10.3454,
-      "x": 2.56,
-      "y": 1.09,
+      "x": 1.57,
+      "y": 0.62,
       "z": 594.7
     },
     {
       "name": "deploy:Apex 12\" Drouge Parachute",
       "time": 10.35,
-      "x": 2.56,
-      "y": 1.09,
+      "x": 1.57,
+      "y": 0.62,
       "z": 594.7
     },
     {
       "name": "deploy:Elliptical 12-Gore 42\" Parachute",
-      "time": 30.745,
-      "x": 115.19,
-      "y": 37.82,
-      "z": 151.59
+      "time": 30.695,
+      "x": 113.88,
+      "y": 37.23,
+      "z": 152.16
     },
     {
       "name": "landing",
-      "time": 65.3091,
-      "x": 281.05,
-      "y": 99.58,
+      "time": 65.3901,
+      "x": 280.46,
+      "y": 99.29,
       "z": 0.0
     }
   ],
   "summary": {
-    "apogee": 595.33,
+    "apogee": 594.7,
     "apogee_time": 10.345,
     "max_speed": 135.41,
     "max_mach": 0.3994,
     "max_acceleration": 620.48,
     "max_q": 11282.6,
     "max_q_time": 0.33,
-    "flight_time": 65.309,
+    "flight_time": 65.39,
     "landing": [
-      281.05,
-      99.58
+      280.46,
+      99.29
     ],
     "rail_exit_speed": 53.34
   },
@@ -202,28 +202,28 @@
         {
           "probability": 0.5,
           "center": [
-            273.71,
-            100.18
+            272.76,
+            99.83
           ],
-          "semi_major": 96.23,
-          "semi_minor": 95.03,
-          "angle": -20.96,
-          "observed": 0.514
+          "semi_major": 95.98,
+          "semi_minor": 94.78,
+          "angle": -20.33,
+          "observed": 0.518
         },
         {
           "probability": 0.95,
           "center": [
-            273.71,
-            100.18
+            272.76,
+            99.83
           ],
-          "semi_major": 200.06,
-          "semi_minor": 197.56,
-          "angle": -20.96,
+          "semi_major": 199.55,
+          "semi_minor": 197.05,
+          "angle": -20.33,
           "observed": 0.944
         }
       ],
-      "max_distance": 606.17,
-      "p95_distance": 436.04
+      "max_distance": 603.21,
+      "p95_distance": 433.61
     }
   }
 }

@@ -2,6 +2,7 @@
 
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -83,3 +84,20 @@ def test_matches_openrocket(name):
     assert flight.event("apogee").time == pytest.approx(ref["events"]["apogee"][0], rel=0.02)
     assert flight.event("burnout").altitude == pytest.approx(
         max(a for t, a in zip(theirs["time"], theirs["altitude"]) if t <= ref["events"]["burnout"][0]), rel=0.02)
+
+
+@pytest.mark.parametrize("name", ["a_simple_model_rocket", "presets", "chute_release", "dual_parachute_deployment"])
+def test_the_rocket_never_jumps(name):
+    """Through apogee and every parachute opening, the rocket moves and turns continuously: no
+    sample is further from the last than its speed allows, and it never spins round in a blink."""
+    path = ROCKETS / f"{name}.json"
+    c = simulate(load_rocket(path), replace(load_launch(path), wind_speed=6.0)).columns
+    for i in range(1, len(c["time"])):
+        dt = c["time"][i] - c["time"][i - 1]
+        if dt <= 0:
+            continue
+        step = math.dist((c["x"][i], c["y"][i], c["z"][i]), (c["x"][i - 1], c["y"][i - 1], c["z"][i - 1]))
+        assert step / dt < max(c["speed"][i], c["speed"][i - 1]) + 10, f"jumped {step:.2f} m at t={c['time'][i]:.2f}"
+        dq = abs(sum(c[k][i] * c[k][i - 1] for k in ("qw", "qx", "qy", "qz")))
+        turn = math.degrees(2 * math.acos(min(1.0, dq)))
+        assert turn / dt < 720, f"turned {turn:.0f}° in {dt * 1000:.0f} ms at t={c['time'][i]:.2f}"
