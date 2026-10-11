@@ -5,11 +5,11 @@
     "event": "Dual parachute deployment",
     "location": "Test range",
     "name": "H669N flight",
-    "date": "2026-09-28T00:48:50"
+    "date": "2026-10-10T22:21:54"
   },
   "time_range": {
     "start": 0.0,
-    "end": 66.216
+    "end": 65.309
   },
   "rocket": {
     "id": "dual_parachute_deployment",
@@ -94,6 +94,9 @@
     "heading": 90.0,
     "wind_speed": 4.0,
     "wind_from": 250.0,
+    "wind_gradient": 0.14285714285714285,
+    "turbulence": 0.1,
+    "turbulence_seed": 0,
     "site_name": "Test range",
     "site_altitude": 0.0,
     "temperature": 288.15,
@@ -124,51 +127,51 @@
     {
       "name": "burnout",
       "time": 0.329,
-      "x": -0.09,
+      "x": -0.07,
       "y": -0.03,
       "z": 23.79
     },
     {
       "name": "apogee",
-      "time": 10.3374,
-      "x": -5.14,
-      "y": -1.87,
-      "z": 595.25
+      "time": 10.3454,
+      "x": 2.56,
+      "y": 1.09,
+      "z": 594.7
     },
     {
       "name": "deploy:Apex 12\" Drouge Parachute",
-      "time": 10.34,
-      "x": -5.14,
-      "y": -1.87,
-      "z": 595.25
+      "time": 10.35,
+      "x": 2.56,
+      "y": 1.09,
+      "z": 594.7
     },
     {
       "name": "deploy:Elliptical 12-Gore 42\" Parachute",
-      "time": 30.69,
-      "x": 58.34,
-      "y": 21.24,
-      "z": 151.44
+      "time": 30.745,
+      "x": 115.19,
+      "y": 37.82,
+      "z": 151.59
     },
     {
       "name": "landing",
-      "time": 66.216,
-      "x": 191.88,
-      "y": 69.84,
+      "time": 65.3091,
+      "x": 281.05,
+      "y": 99.58,
       "z": 0.0
     }
   ],
   "summary": {
-    "apogee": 595.25,
-    "apogee_time": 10.337,
+    "apogee": 595.33,
+    "apogee_time": 10.345,
     "max_speed": 135.41,
-    "max_mach": 0.3984,
+    "max_mach": 0.3994,
     "max_acceleration": 620.48,
-    "max_q": 11225.1,
+    "max_q": 11282.6,
     "max_q_time": 0.33,
-    "flight_time": 66.216,
+    "flight_time": 65.309,
     "landing": [
-      191.88,
-      69.84
+      281.05,
+      99.58
     ],
     "rail_exit_speed": 53.34
   },
@@ -185,41 +188,42 @@
       "drag": 0.05,
       "mass": 0.02,
       "parachute_cd": 0.07,
-      "ejection_delay": 0.1
+      "ejection_delay": 0.1,
+      "gusts": 1.0
     },
     "apogee": {
-      "mean": 596.32,
-      "sd": 24.9,
-      "p5": 557.44,
-      "p95": 639.56
+      "mean": 596.01,
+      "sd": 24.86,
+      "p5": 557.02,
+      "p95": 640.02
     },
     "landing": {
       "zones": [
         {
           "probability": 0.5,
           "center": [
-            188.14,
-            68.88
+            273.71,
+            100.18
           ],
-          "semi_major": 67.45,
-          "semi_minor": 66.43,
-          "angle": -22.42,
-          "observed": 0.512
+          "semi_major": 96.23,
+          "semi_minor": 95.03,
+          "angle": -20.96,
+          "observed": 0.514
         },
         {
           "probability": 0.95,
           "center": [
-            188.14,
-            68.88
+            273.71,
+            100.18
           ],
-          "semi_major": 140.23,
-          "semi_minor": 138.1,
-          "angle": -22.42,
-          "observed": 0.942
+          "semi_major": 200.06,
+          "semi_minor": 197.56,
+          "angle": -20.96,
+          "observed": 0.944
         }
       ],
-      "max_distance": 413.77,
-      "p95_distance": 303.74
+      "max_distance": 606.17,
+      "p95_distance": 436.04
     }
   }
 }
