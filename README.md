@@ -8,6 +8,13 @@ built-in flight simulator.
 > for both, Monte Carlo landing zones and live telemetry for both (UDP or WebSocket)
 > work today.
 
+> **On the hosted site** ([telemetry-platform.onrender.com](https://telemetry-platform.onrender.com)),
+> two features are limited:
+> - Running a new Monte Carlo simulation is turned off (the baked-in results still show).
+> - F1 races built on the site disappear when the server restarts.
+>
+> Both work fully when you run it yourself; see [Render (free)](#render-free) for why.
+
 ## Features
 
 **F1**
