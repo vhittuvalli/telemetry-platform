@@ -91,6 +91,12 @@ def build_race_replay(session, padding_s=60):
             continue
         frames.append(to_standard_format(tel, driver))
 
+    if not frames:
+        #since Oct 2026 F1's timing API needs an F1TV login; without one FastF1 loads no telemetry
+        raise ValueError(
+            "No car telemetry for this session. F1's timing data now needs an F1TV login, "
+            "so new races can't be downloaded here right now"
+        )
     replay = pd.concat(frames, ignore_index=True)
     #FastF1 reports (0, 0, 0) while a car has no position fix (e.g. before it leaves the garage)
     replay = replay[~((replay["x"] == 0) & (replay["y"] == 0))]
